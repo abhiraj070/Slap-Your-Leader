@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
 
-class locationRequest(BaseModel):
+class LocationRequest(BaseModel):
     latitude: str
     longitude: str
