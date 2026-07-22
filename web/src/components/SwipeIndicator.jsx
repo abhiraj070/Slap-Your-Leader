@@ -12,11 +12,14 @@ import { ArrowRight, Search } from "lucide-react";
  * also carries a dot until it's been opened at least once.
  */
 export function PagerTabs({ pages, active, onSelect, unseenAccent }) {
+  const columns = pages.length;
+
   return (
     <div
       role="group"
       aria-label="Sections"
-      className="grid grid-cols-3 overflow-hidden rounded-card border border-rule bg-surface"
+      className="grid overflow-hidden rounded-card border border-rule bg-surface shadow-card"
+      style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
     >
       {pages.map((page, index) => {
         const isActive = index === active;
@@ -27,8 +30,19 @@ export function PagerTabs({ pages, active, onSelect, unseenAccent }) {
             type="button"
             onClick={() => onSelect(index)}
             aria-current={isActive}
-            className={`min-w-0 border-r border-b-2 border-rule px-2.5 py-2.5 text-left transition-colors last:border-r-0 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ink sm:px-4 ${
-              isActive ? "border-b-ink" : "border-b-transparent hover:bg-paper/60"
+            style={{
+              // Inline to guarantee it wins the cascade — a class-based
+              // `border-b-ink` was silently ignored under Tailwind v4's
+              // preflight (a `border-rule` shorthand overrode it). No CSS
+              // transition here either — repeated re-renders in the tree
+              // restart the transition from its previous value every frame,
+              // so the border effectively never lands.
+              borderBottom: `2px solid ${
+                isActive ? "var(--color-ink)" : "transparent"
+              }`,
+            }}
+            className={`relative min-w-0 border-r border-rule px-2.5 py-2.5 text-left last:border-r-0 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ink sm:px-4 ${
+              !isActive ? "hover:bg-paper/60" : ""
             } ${page.accent ? "bg-paper" : ""}`}
           >
             <span
@@ -37,8 +51,14 @@ export function PagerTabs({ pages, active, onSelect, unseenAccent }) {
               }`}
             >
               {page.accent && unseenAccent && (
-                <span
+                <motion.span
                   aria-hidden
+                  animate={{ scale: [1, 1.4, 1], opacity: [0.7, 1, 0.7] }}
+                  transition={{
+                    duration: 1.6,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                  }}
                   className="size-1.5 shrink-0 rounded-full bg-slap"
                 />
               )}

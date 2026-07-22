@@ -65,6 +65,76 @@ def get_minister(request: MinistrySearchRequest, db: Session= Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
     
+# Leaderboards: one per tier. Each returns the top 10 by slap_count and by
+# rose_count, filtered to counts > 0 so an empty state can render cleanly.
+# No request body — the client sends `{}`.
+@app.post("/get-leaderboard-mla")
+def get_leaderboard_mla(db: Session= Depends(get_db)):
+    try:
+        cols= (mla.c.name, mla.c.party, mla.c.constituency, mla.c.constituency_key,
+               mla.c.photo_url, mla.c.slap_count, mla.c.rose_count)
+        slap_toppers= db.execute(
+            select(*cols).where(mla.c.slap_count > 0)
+                         .order_by(mla.c.slap_count.desc())
+                         .limit(10)
+        ).mappings().all()
+        rose_toppers= db.execute(
+            select(*cols).where(mla.c.rose_count > 0)
+                         .order_by(mla.c.rose_count.desc())
+                         .limit(10)
+        ).mappings().all()
+        print("record:",slap_toppers)
+        return {"slap_toppers": slap_toppers, "rose_toppers": rose_toppers}
+    except SQLAlchemyError as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+
+
+@app.post("/get-leaderboard-mp")
+def get_leaderboard_mp(db: Session= Depends(get_db)):
+    try:
+        cols= (mp.c.name, mp.c.party, mp.c.constituency, mp.c.constituency_key,
+               mp.c.photo_url, mp.c.slap_count, mp.c.rose_count)
+        slap_toppers= db.execute(
+            select(*cols).where(mp.c.slap_count > 0)
+                         .order_by(mp.c.slap_count.desc())
+                         .limit(10)
+        ).mappings().all()
+        rose_toppers= db.execute(
+            select(*cols).where(mp.c.rose_count > 0)
+                         .order_by(mp.c.rose_count.desc())
+                         .limit(10)
+        ).mappings().all()
+        return {"slap_toppers": slap_toppers, "rose_toppers": rose_toppers}
+    except SQLAlchemyError as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+
+
+@app.post("/get-leaderboard-minister")
+def get_leaderboard_minister(db: Session= Depends(get_db)):
+    try:
+        cols= (minister.c.minister_name, minister.c.party, minister.c.ministry,
+               minister.c.photo_url, minister.c.slap_count, minister.c.rose_count)
+        slap_toppers= db.execute(
+            select(*cols).where(minister.c.slap_count > 0)
+                         .order_by(minister.c.slap_count.desc())
+                         .limit(10)
+        ).mappings().all()
+        rose_toppers= db.execute(
+            select(*cols).where(minister.c.rose_count > 0)
+                         .order_by(minister.c.rose_count.desc())
+                         .limit(10)
+        ).mappings().all()
+        return {"slap_toppers": slap_toppers, "rose_toppers": rose_toppers}
+    except SQLAlchemyError as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+
+
 @app.patch("/update-member-count")
 def update_member_count(request: UpdateMemberRequest, db: Session= Depends(get_db)):
     try:
@@ -120,3 +190,4 @@ def update_ministry_count(request: UpdateMinistryRequest, db: Session= Depends(g
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+

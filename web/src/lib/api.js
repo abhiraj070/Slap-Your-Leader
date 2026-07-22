@@ -39,6 +39,28 @@ export async function fetchRepresentatives({ latitude, longitude }) {
   return data;
 }
 
+const LEADERBOARD_PATH = {
+  mla: "/get-leaderboard-mla",
+  mp: "/get-leaderboard-mp",
+  minister: "/get-leaderboard-minister",
+};
+
+/**
+ * `POST /get-leaderboard-{tier}` — top 10 rows by slap count and by rose count.
+ *
+ * The backend filters counts > 0, so an empty response is a genuine "nobody's
+ * been voted on yet" signal rather than sparse data.
+ */
+export async function fetchLeaderboard(tier) {
+  const path = LEADERBOARD_PATH[tier];
+  if (!path) throw new Error(`Unknown leaderboard tier: ${tier}`);
+  const { data } = await api.post(path, {});
+  return {
+    slapToppers: Array.isArray(data?.slap_toppers) ? data.slap_toppers : [],
+    roseToppers: Array.isArray(data?.rose_toppers) ? data.rose_toppers : [],
+  };
+}
+
 /**
  * `POST /get-minister` with no name — returns the whole council of ministers.
  *

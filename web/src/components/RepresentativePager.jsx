@@ -1,9 +1,23 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { PagerTabs, SwipeIndicator } from "./SwipeIndicator";
+
+/**
+ * Tells child components whether the section they belong to has been visited.
+ *
+ * Used by `Leaderboard` to gate lazy fetches: MLA fires immediately because
+ * page 0 is visited on mount, MP and Minister fire when the user reaches them.
+ * A cleaner signal than IntersectionObserver — deterministic and works in
+ * headless/backgrounded panes too.
+ */
+const VisitedTiersContext = createContext(new Set());
+
+export function useTierVisited(tier) {
+  return useContext(VisitedTiersContext).has(tier);
+}
 
 /**
  * The three sections, one at a time, at every breakpoint.
@@ -23,6 +37,26 @@ export function RepresentativePager({ pages }) {
   const trackRef = useRef(null);
   const [active, setActive] = useState(0);
   const [seenAccent, setSeenAccent] = useState(false);
+  const [visitedTiers, setVisitedTiers] = useState(
+    () => new Set(pages[0]?.tier ? [pages[0].tier] : []),
+  );
+
+  const markVisited = useCallback(
+    (index) => {
+      const tier = pages[index]?.tier;
+      if (!tier) return;
+      setVisitedTiers((prev) =>
+        prev.has(tier) ? prev : new Set(prev).add(tier),
+      );
+    },
+    [pages],
+  );
+  // Programmatic navigations set `active` up front so the tab underline
+  // reacts instantly. This ref tells the scroll handler to trust that
+  // value until the animated scroll converges — otherwise a mid-flight
+  // scroll event could snap `active` back to whichever page the animation
+  // is passing through.
+  const targetRef = useRef(0);
 
   const markSeen = useCallback(
     (index) => {
@@ -36,21 +70,33 @@ export function RepresentativePager({ pages }) {
       const track = trackRef.current;
       if (!track) return;
       const clamped = Math.max(0, Math.min(index, pages.length - 1));
+      targetRef.current = clamped;
+      setActive(clamped);
       track.scrollTo({ left: clamped * track.clientWidth, behavior: "smooth" });
       markSeen(clamped);
+      markVisited(clamped);
     },
-    [pages.length, markSeen],
+    [pages.length, markSeen, markVisited],
   );
 
   const handleScroll = useCallback(
     (event) => {
       const track = event.currentTarget;
-      if (track.clientWidth === 0) return;
-      const index = Math.round(track.scrollLeft / track.clientWidth);
+      const width = track.clientWidth;
+      if (width === 0) return;
+      // Only accept scroll positions that have snapped to a page boundary;
+      // mid-flight events would flip `active` through pages the animation is
+      // just passing over. `scroll-snap-mandatory` guarantees the resting
+      // position is on a boundary, so real touch swipes still land here.
+      const offset = track.scrollLeft % width;
+      if (offset > 4 && width - offset > 4) return;
+      const index = Math.round(track.scrollLeft / width);
+      targetRef.current = index;
       setActive(index);
       markSeen(index);
+      markVisited(index);
     },
-    [markSeen],
+    [markSeen, markVisited],
   );
 
   const handleKeyDown = useCallback(
@@ -76,6 +122,7 @@ export function RepresentativePager({ pages }) {
   const atEnd = active === pages.length - 1;
 
   return (
+    <VisitedTiersContext.Provider value={visitedTiers}>
     <div className="w-full" onKeyDown={handleKeyDown}>
       {multiple && (
         <div className="sticky top-0 z-10 mb-5 bg-paper/95 px-5 pt-2 pb-1 backdrop-blur-sm sm:px-8 lg:px-0">
@@ -130,6 +177,7 @@ export function RepresentativePager({ pages }) {
         )}
       </div>
     </div>
+    </VisitedTiersContext.Provider>
   );
 }
 

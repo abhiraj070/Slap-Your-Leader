@@ -49,7 +49,7 @@ function Projectile({ flight, ghost }) {
 
   return (
     <motion.span
-      initial={{ x: 0, y: 0, scale: 0.4, opacity: 0, rotate: isSlap ? 18 : 0 }}
+      initial={{ x: 0, y: 0, scale: 0.4, opacity: 0, rotate: isSlap ? 55 : 0 }}
       animate={{
         // Winds back (the small negative step) before arcing over to the face.
         x: [0, dx * -0.08, dx * 0.45, dx],
@@ -57,7 +57,11 @@ function Projectile({ flight, ghost }) {
         // Grows on approach, then a squash as it lands.
         scale: [0.4, 0.7, 1.35, 1.8],
         opacity: [0, ghost.opacity, ghost.opacity, ghost.opacity],
-        rotate: isSlap ? [18, 34, -8, -30] : [0, 60, 240, 400],
+        // Slap: cocked wide, drops through neutral, whips through on contact —
+        // the last stop is where the palm meets the face, so the rotation
+        // accelerates hardest in the final 40% of the arc.
+        // Rose: two full tumbles end over end.
+        rotate: isSlap ? [55, 40, 0, -55] : [0, 60, 240, 400],
       }}
       exit={{
         opacity: 0,

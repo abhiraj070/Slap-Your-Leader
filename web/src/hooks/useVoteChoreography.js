@@ -149,6 +149,11 @@ export function useVoteChoreography({ stageRef, portraitRef, buttonsRef }) {
               // than a symmetric wobble.
               x: [0, 13 * direction, -6 * direction, 3 * direction, 0],
               rotate: [0, 2.8 * direction, -1.3 * direction, 0.5 * direction, 0],
+              // The face twist. skewX at a top-heavy transform origin shifts
+              // the upper half horizontally — reads as the flesh pushing with
+              // the blow, then whipping back. Peaks in the same direction as
+              // the strike so the face moves with it, not against.
+              skewX: [0, 6 * direction, -2.5 * direction, 1 * direction, 0],
               scale: [1.16, 1.09, 1.13, 1.12],
               transition: {
                 duration: IMPACT_MS / 1000,
@@ -169,6 +174,9 @@ export function useVoteChoreography({ stageRef, portraitRef, buttonsRef }) {
         scale: 1,
         x: 0,
         rotate: 0,
+        // Reset explicitly: Framer leaves omitted properties at their last
+        // committed value, so a lingering skew would carry over otherwise.
+        skewX: 0,
         transition: { duration: SETTLE_MS / 1000, ease: [0.2, 0, 0, 1] },
       });
       await wait(SETTLE_MS);

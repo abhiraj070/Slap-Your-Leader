@@ -5,11 +5,12 @@ import { motion } from "framer-motion";
 import { useCallback, useMemo, useState } from "react";
 
 import { Landing } from "@/components/Landing";
+import { Leaderboard } from "@/components/Leaderboard";
 import { MinisterSection } from "@/components/MinisterSection";
 import { RepresentativeCard } from "@/components/RepresentativeCard";
 import { RepresentativePager } from "@/components/RepresentativePager";
+import { ResultsHeader } from "@/components/ResultsHeader";
 import { ErrorScreen, LocatingScreen } from "@/components/StatusScreens";
-import { Button } from "@/components/ui/Button";
 import { useMinistries } from "@/hooks/useMinistries";
 import { fetchRepresentatives, toFriendlyError } from "@/lib/api";
 import {
@@ -78,27 +79,37 @@ export default function Home() {
         // don't carry over to a different person.
         key: voteKey(page.tier, page.representative),
         label: page.label,
+        tier: page.tier,
         // The switcher previews each section so the third one advertises
         // itself instead of hiding behind a bare label.
         preview: [page.representative.name, page.representative.party]
           .filter(Boolean)
           .join(" · "),
         node: (
-          <RepresentativeCard
-            tier={page.tier}
-            representative={page.representative}
-          />
+          <div className="grid gap-6 lg:grid-cols-2 lg:items-start lg:gap-8">
+            <RepresentativeCard
+              tier={page.tier}
+              representative={page.representative}
+            />
+            <Leaderboard tier={page.tier} />
+          </div>
         ),
       }));
 
     built.push({
       key: "ministers",
       label: "Ministers",
+      tier: "minister",
       preview: ministryCount
         ? `Search ${ministryCount} ministries`
         : "Search the council",
       accent: true,
-      node: <MinisterSection />,
+      node: (
+        <div className="grid gap-6 lg:grid-cols-2 lg:items-start lg:gap-8">
+          <MinisterSection />
+          <Leaderboard tier="minister" />
+        </div>
+      ),
     });
 
     return built;
@@ -169,17 +180,9 @@ export default function Home() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.25, ease: [0.2, 0, 0, 1] }}
-          className="mx-auto w-full max-w-5xl py-10 sm:py-14"
+          className="mx-auto w-full max-w-6xl py-10 sm:py-14"
         >
-          <header className="mb-5 px-5 sm:px-8 lg:px-0">
-            <p className="eyebrow">Your representatives</p>
-            <h1 className="mt-2 font-serif text-3xl text-balance sm:text-4xl">
-              Here&apos;s who answers for you
-            </h1>
-            <p className="mt-2 text-sm text-muted">
-              Three sections — swipe, or use the arrows.
-            </p>
-          </header>
+          <ResultsHeader representatives={data} />
 
           <RepresentativePager pages={pages} />
         </motion.div>

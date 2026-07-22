@@ -1,12 +1,59 @@
-# Python-generated files
+# macOS
+.DS_Store
+
+# Editor / IDE
+.idea/
+.vscode/
+*.iml
+
+# Environment and local config
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 build/
 dist/
 wheels/
-*.egg-info
+*.egg-info/
 
 # Virtual environments
-.venv
-.env
-*.iml
-.idea/boundaries/eci-2026/*.geojson
+.venv/
+venv/
+env/
+ENV/
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Generated boundary data
+boundaries/eci-2026/*.geojson
+
+# Node / Next.js
+node_modules/
+web/node_modules/
+web/.next/
+web/out/
+web/build/
+web/coverage/
+web/.vercel/
+web/*.tsbuildinfo
+web/next-env.d.ts
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
