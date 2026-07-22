@@ -6,12 +6,6 @@ from fastapi import Depends, HTTPException
 from sqlalchemy import MetaData, Table, select, func, update
 from sqlalchemy.exc import SQLAlchemyError
 
-# Schemas are reflected ONCE at import, not per request. Reflecting these five
-# tables costs ~20s against Neon, and doing it inside the handlers made every
-# /get-location call take ~21.6s -- past the web client's 15s timeout -- while
-# the actual spatial queries take ~1.2s combined.
-# Consequence: a DB schema change needs a server restart to be picked up
-# (uvicorn --reload already does that on file save).
 metadata= MetaData()
 mla= Table("mlas", metadata, autoload_with= engine)
 mp= Table("mps", metadata, autoload_with= engine)
@@ -20,14 +14,8 @@ pc= Table("parliamentary_constituencies", metadata, autoload_with= engine)
 manifesto= Table("party_manifesto_points", metadata, autoload_with=engine)
 minister= Table("ministers", metadata, autoload_with= engine)
 
-# Whitelist for /update-member-count: the table name arrives from the client,
-# so it must map to a known table rather than being reflected as given.
 MEMBER_TABLES= {"mlas": mla, "mps": mp}
 
-
-# POST rather than GET: the coordinates arrive as a request body, and browsers
-# drop the body on GET (the XHR spec nulls it out), so a GET is uncallable from
-# the web client.
 @app.post("/get-location")
 def get_location(request: LocationRequest, db: Session= Depends(get_db)):
     try:
@@ -58,12 +46,7 @@ def get_location(request: LocationRequest, db: Session= Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
-
-# POST for the same reason as /get-location: the payload arrives as a request
-# body, and browsers drop the body on GET.
-# With no `name`, returns the whole council under "ministers" — the picker
-# loads it once and filters locally. With a `name`, the original single-result
-# "minister_details" contract is unchanged.
+    
 @app.post("/get-minister")
 def get_minister(request: MinistrySearchRequest, db: Session= Depends(get_db)):
     try:
@@ -89,14 +72,12 @@ def update_member_count(request: UpdateMemberRequest, db: Session= Depends(get_d
         name= request.name_field_to_update
         constituency_key= request.constituency_key
         field= request.field_to_update
+        metadata= MetaData()
 
         if field not in ("slap_count","rose_count"):
             raise HTTPException(status_code=400, detail=f"Cannot update {field} field")
 
-        if table not in MEMBER_TABLES:
-            raise HTTPException(status_code=400, detail=f"Cannot update {table} table")
-
-        member= MEMBER_TABLES[table]
+        member= Table(table, metadata, autoload_with= engine)
 
         stmt= (update(member)
                .where((member.c.constituency_key==constituency_key) & (member.c.name==name))
