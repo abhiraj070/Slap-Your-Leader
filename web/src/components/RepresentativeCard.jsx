@@ -2,8 +2,8 @@
 
 import { motion } from "framer-motion";
 import { useRef } from "react";
+import { Info, Share2, Trophy } from "lucide-react";
 
-import { ManifestoList } from "./ManifestoList";
 import { VoteAnnouncement } from "./vote/VoteAnnouncement";
 import { VoteFlight } from "./vote/VoteFlight";
 import { VotePortrait } from "./vote/VotePortrait";
@@ -11,98 +11,117 @@ import { VoteButtons } from "./VoteButtons";
 import { useVote } from "@/hooks/useVote";
 import { useVoteChoreography } from "@/hooks/useVoteChoreography";
 
-const TIER_COPY = {
-  mla: { office: "Member of Legislative Assembly" },
-  mp: { office: "Member of Parliament" },
+const DESIGNATION = {
+  mp: "Your MP",
+  minister: (subject) => subject?.rank_title || "Union Minister",
 };
 
-/** Scraper coverage is partial, so every field can come back null. */
-function orNull(value) {
-  if (value === null || value === undefined) return null;
-  const text = String(value).trim();
-  return text.length > 0 ? text : null;
-}
-
 /**
- * Full record for one representative: portrait beside the particulars, the
- * party's manifesto below, then the verdict controls.
+ * The slim representative card: portrait, name, designation, and the vote
+ * controls. All other information lives behind the Information bottom sheet.
  */
-export function RepresentativeCard({ tier, representative }) {
-  const { choice, casts, vote, isError } = useVote(tier, representative);
-  // The card owns the DOM refs the flight path is measured from.
+export function RepresentativeCard({
+  subject,
+  keySeed,
+  onOpenInfo,
+  onOpenLeaderboard,
+  onShare,
+  onFirstVote,
+}) {
   const stageRef = useRef(null);
   const portraitRef = useRef(null);
   const buttonsRef = useRef({});
+
+  const { choice, casts, vote, isError } = useVote(subject.tier, subject);
   const choreo = useVoteChoreography({ stageRef, portraitRef, buttonsRef });
 
-  const constituency = orNull(representative.constituency);
-  const education = orNull(representative.education);
-  const party = orNull(representative.party);
-  const cases = representative.criminal_cases;
+  const slaps = (subject.slap_count ?? 0) + (choice === "slap" ? casts : 0);
+  const roses = (subject.rose_count ?? 0) + (choice === "rose" ? casts : 0);
 
-  const slaps = (representative.slap_count ?? 0) + (choice === "slap" ? casts : 0);
-  const roses = (representative.rose_count ?? 0) + (choice === "rose" ? casts : 0);
+  const designation =
+    subject.tier === "minister"
+      ? typeof DESIGNATION.minister === "function"
+        ? DESIGNATION.minister(subject)
+        : DESIGNATION.minister
+      : DESIGNATION[subject.tier];
 
   return (
     <motion.article
-      initial={{ opacity: 0, y: 8 }}
+      key={keySeed}
+      initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, ease: [0.2, 0, 0, 1] }}
-      className="relative rounded-card border border-rule bg-surface p-5 shadow-card sm:p-7"
+      exit={{ opacity: 0, y: -8 }}
+      transition={{ duration: 0.32, delay: 0.08, ease: [0.2, 0, 0, 1] }}
       ref={stageRef}
+      className="relative overflow-visible rounded-card border border-rule bg-surface p-6 shadow-lift transition-shadow duration-300 sm:p-8"
     >
-      {/* ---- Identity ---- */}
-      <div className="flex items-start gap-4 sm:gap-6">
-        <VotePortrait
-          src={representative.photo_url}
-          name={representative.name}
-          className="w-21 sm:w-33"
-          portraitRef={portraitRef}
-          controls={choreo.portraitControls}
-          showSlapMark={choreo.showSlapMark}
-          showBloom={choreo.showBloom}
-          direction={choreo.impactDirection}
-        />
-
-        <div className="min-w-0 flex-1">
-          <p className="eyebrow">{TIER_COPY[tier].office}</p>
-          <h2 className="mt-1.5 font-serif text-2xl leading-tight text-balance sm:text-3xl">
-            {representative.name}
-          </h2>
-          {party && <p className="mt-1.5 text-sm text-muted">{party}</p>}
-
-          {/* Particulars sit beside the portrait only when there's room for
-              two columns; below `sm` they'd be squeezed to a few words a line. */}
-          <dl className="mt-4 hidden border-t border-rule sm:block">
-            <Fact term="Constituency">{constituency ?? "Not on record"}</Fact>
-            <Fact term="Education">{education ?? "Not on record"}</Fact>
-            <Fact term="Criminal cases" last>
-              <CriminalCases value={cases} />
-            </Fact>
-          </dl>
+      {onOpenInfo && (
+        <div className="absolute top-4 left-4 sm:top-5 sm:left-5">
+          <IconAction label="Information" onClick={onOpenInfo} icon={Info} />
         </div>
+      )}
+      {onShare && (
+        <div className="absolute top-4 right-4 sm:top-5 sm:right-5">
+          <IconAction
+            label="Share"
+            onClick={onShare}
+            icon={Share2}
+            highlight={Boolean(choice)}
+          />
+        </div>
+      )}
+
+      <div className="flex flex-col items-center text-center">
+        <motion.div whileHover={{ scale: 1.03 }} transition={{ duration: 0.24, ease: [0.2, 0, 0, 1] }}>
+          <VotePortrait
+            src={subject.photo_url}
+            name={subject.name}
+            className="w-36 sm:w-44"
+            portraitRef={portraitRef}
+            controls={choreo.portraitControls}
+            showSlapMark={choreo.showSlapMark}
+            showBloom={choreo.showBloom}
+            direction={choreo.impactDirection}
+          />
+        </motion.div>
+
+        <p className="eyebrow mt-6">{designation}</p>
+
+        <h2 className="mt-2 font-serif text-3xl leading-tight text-balance text-ink sm:text-4xl">
+          {subject.name}
+        </h2>
+
+        <p className="mt-2 text-sm text-muted">
+          Your take on them, in two taps.
+        </p>
       </div>
 
-      <dl className="mt-4 border-t border-rule sm:hidden">
-        <Fact term="Constituency">{constituency ?? "Not on record"}</Fact>
-        <Fact term="Education">{education ?? "Not on record"}</Fact>
-        <Fact term="Criminal cases" last>
-          <CriminalCases value={cases} />
-        </Fact>
-      </dl>
-
-      <ManifestoList representative={representative} />
-
-      {/* ---- Verdict ---- */}
-      <div className="mt-6 border-t border-rule pt-5">
-        <p className="mb-3 text-xs tabular-nums text-muted">
-          {slaps.toLocaleString("en-IN")} slaps · {roses.toLocaleString("en-IN")}{" "}
-          roses
-        </p>
+      <div className="mx-auto mt-8 max-w-md">
+        {onOpenLeaderboard && (
+          <div className="mb-4 flex justify-center">
+            <motion.button
+              type="button"
+              onClick={onOpenLeaderboard}
+              whileHover={{ y: -1 }}
+              whileTap={{ y: 1 }}
+              transition={{ duration: 0.15, ease: [0.2, 0, 0, 1] }}
+              className="inline-flex items-center gap-1.5 rounded-full border border-rule bg-paper/70 px-3.5 py-1.5 text-xs font-medium tracking-[0.05em] text-ink uppercase transition-colors hover:border-ink hover:text-slap focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+            >
+              <Trophy className="size-3.5" strokeWidth={2} />
+              Leaderboard
+            </motion.button>
+          </div>
+        )}
         <VoteButtons
           choice={choice}
-          casts={casts}
-          onVote={(next) => choreo.play(next, () => vote(next))}
+          slapCount={slaps}
+          roseCount={roses}
+          onVote={(next) =>
+            choreo.play(next, () => {
+              vote(next);
+              onFirstVote?.(next);
+            })
+          }
           isError={isError}
           busy={choreo.isBusy}
           buttonsRef={buttonsRef}
@@ -115,20 +134,48 @@ export function RepresentativeCard({ tier, representative }) {
   );
 }
 
-function Fact({ term, children, last = false }) {
-  return (
-    <div
-      className={`flex gap-4 py-2.5 ${last ? "" : "border-b border-rule"}`}
-    >
-      <dt className="eyebrow w-30 shrink-0 pt-0.5">{term}</dt>
-      <dd className="min-w-0 flex-1 text-sm">{children}</dd>
-    </div>
-  );
-}
+/**
+ * Circular icon button — consistent size, hover, and press for anything that
+ * needs to sit in a card corner or a floating context.
+ *
+ * `highlight` turns it into the reward beat for whatever just happened (the
+ * Share button once a vote lands): filled accent + a soft looping pulse ring,
+ * echoing the ring already used elsewhere (Ornament) rather than introducing
+ * a new motion pattern.
+ */
+export function IconAction({
+  label,
+  onClick,
+  icon: Icon,
+  size = "md",
+  highlight = false,
+}) {
+  const dimensions = size === "lg" ? "size-14" : "size-10";
+  const iconSize = size === "lg" ? "size-6" : "size-4";
 
-/** A colour shift rather than an alarm badge — the number speaks for itself. */
-function CriminalCases({ value }) {
-  if (value === null || value === undefined) return "Not on record";
-  if (value === 0) return "None declared";
-  return <span className="text-slap">{value} declared</span>;
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      whileHover={{ scale: 1.08 }}
+      whileTap={{ scale: 0.94 }}
+      transition={{ type: "spring", stiffness: 420, damping: 22 }}
+      className={`relative ${dimensions} flex shrink-0 items-center justify-center rounded-full border shadow-card transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink ${
+        highlight
+          ? "border-slap bg-slap text-paper"
+          : "border-rule bg-surface text-ink hover:border-ink hover:text-slap"
+      }`}
+    >
+      {highlight && (
+        <motion.span
+          aria-hidden
+          className="absolute inset-0 rounded-full border border-slap"
+          animate={{ scale: [1, 1.35, 1], opacity: [0.6, 0, 0] }}
+          transition={{ duration: 1.8, repeat: Infinity, ease: "easeOut" }}
+        />
+      )}
+      <Icon className={iconSize} strokeWidth={2} />
+    </motion.button>
+  );
 }

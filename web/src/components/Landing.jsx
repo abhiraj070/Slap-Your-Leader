@@ -35,23 +35,21 @@ export function Landing({ onAllowLocation, isBusy }) {
     >
       <div>
         <motion.p variants={item} className="eyebrow">
-          Public record · India
+          Verdicts · India
         </motion.p>
 
         <motion.h1
           variants={item}
-          className="mt-3 font-serif text-4xl leading-[1.08] text-balance sm:text-5xl lg:text-6xl"
+          className="mt-3 font-serif text-5xl leading-[1.02] text-balance sm:text-6xl lg:text-7xl"
         >
-          Slap Your Leader
+          Slap or Rose? <span className="text-slap">You decide.</span>
         </motion.h1>
 
         <motion.p
           variants={item}
-          className="mt-4 max-w-xl leading-relaxed text-muted text-pretty"
+          className="mt-5 max-w-md text-lg leading-relaxed text-muted text-pretty"
         >
-          Every constituency has an MLA and an MP answerable to it. Find yours
-          from where you&apos;re standing, read their record, and register a
-          verdict.
+          Read what they promised. Then decide if they deserve a 👋 or 🌹.
         </motion.p>
 
         <motion.div
@@ -59,7 +57,7 @@ export function Landing({ onAllowLocation, isBusy }) {
           className="mt-8 flex flex-wrap items-center gap-4"
         >
           <Button onClick={onAllowLocation} disabled={isBusy}>
-            Use my location
+            Who&apos;s mine? →
           </Button>
           <span className="text-xs text-muted">Read once. Never stored.</span>
         </motion.div>

@@ -3,15 +3,10 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useId, useState } from "react";
 
-import { useTierVisited } from "./RepresentativePager";
 import { useLeaderboard } from "@/hooks/useLeaderboard";
 import { toFriendlyError } from "@/lib/api";
 
 const TIER_COPY = {
-  mla: {
-    title: "Pan India ranking",
-    scope: "Ranked across every state assembly",
-  },
   mp: {
     title: "Pan India ranking",
     scope: "Lok Sabha constituencies across India",
@@ -28,46 +23,55 @@ const OPTIONS = [
 ];
 
 /**
- * A tier-specific ranking, lazily fetched.
+ * A tier-specific ranking.
  *
- * The MLA leaderboard mounts inside the first pager page and fires immediately;
- * MP and Minister leaderboards fire when their pager page becomes horizontally
- * visible (via IntersectionObserver). Once fetched, React Query caches the
- * result for the session.
+ * When rendered inside a bottom sheet the caller passes `forceEnabled` so the
+ * query fires immediately on open (instead of needing a visitation signal). If
+ * the caller passes `highlightName`, that row is emphasised — useful for
+ * showing the reader where the currently-selected representative stands.
  */
-export function Leaderboard({ tier }) {
+export function Leaderboard({
+  tier,
+  forceEnabled = false,
+  highlightName = null,
+  chromeless = false,
+}) {
   const [board, setBoard] = useState("slap");
-  // `enabled` is driven by the pager: true once the section this leaderboard
-  // belongs to has been visited. MLA is visited on mount (page 0), MP and
-  // Minister when the user navigates there.
-  const enabled = useTierVisited(tier);
+  const query = useLeaderboard(tier, forceEnabled);
 
-  const query = useLeaderboard(tier, enabled);
   const copy = TIER_COPY[tier];
   const toppers =
     board === "slap" ? query.data?.slapToppers : query.data?.roseToppers;
-  const isLoading = !enabled || query.isPending;
+  const isLoading = !forceEnabled || query.isPending;
 
-  return (
-    <section className="overflow-hidden rounded-card border border-rule bg-surface shadow-card">
-      <header className="border-b border-rule p-5 sm:p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="eyebrow">Leaderboard</p>
-            <h3 className="mt-1 font-serif text-xl leading-tight text-balance sm:text-2xl">
-              {copy.title}
-            </h3>
-            <p className="mt-1 text-xs text-muted">{copy.scope}</p>
+  const body = (
+    <>
+      {!chromeless && (
+        <header className="border-b border-rule p-5 sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="eyebrow">Leaderboard</p>
+              <h3 className="mt-1 font-serif text-xl leading-tight text-balance sm:text-2xl">
+                {copy?.title ?? "Pan India ranking"}
+              </h3>
+              <p className="mt-1 text-xs text-muted">{copy?.scope}</p>
+            </div>
+
+            <SubTabs value={board} onChange={setBoard} />
           </div>
+        </header>
+      )}
 
+      {chromeless && (
+        <div className="mt-1 mb-3 flex justify-center">
           <SubTabs value={board} onChange={setBoard} />
         </div>
-      </header>
+      )}
 
-      <div className="p-5 sm:p-6">
+      <div className={chromeless ? "pt-2" : "p-5 sm:p-6"}>
         {isLoading && <SkeletonRows />}
 
-        {enabled && query.isError && (
+        {forceEnabled && query.isError && (
           <p
             role="alert"
             className="rounded-control border border-rule px-4 py-3 text-sm text-slap"
@@ -76,17 +80,28 @@ export function Leaderboard({ tier }) {
           </p>
         )}
 
-        {enabled && !query.isPending && !query.isError && (
-          <TopperList toppers={toppers} tier={tier} board={board} />
+        {forceEnabled && !query.isPending && !query.isError && (
+          <TopperList
+            toppers={toppers}
+            tier={tier}
+            board={board}
+            highlightName={highlightName}
+          />
         )}
       </div>
+    </>
+  );
+
+  if (chromeless) return <div>{body}</div>;
+
+  return (
+    <section className="overflow-hidden rounded-card border border-rule bg-surface shadow-card">
+      {body}
     </section>
   );
 }
 
 function SubTabs({ value, onChange }) {
-  // A per-instance id keeps each leaderboard's pill from sliding between
-  // *other* leaderboards on the same page — Framer's `layoutId` is global.
   const instanceId = useId();
   const pillId = `lb-pill-${instanceId}`;
 
@@ -125,7 +140,9 @@ function SubTabs({ value, onChange }) {
   );
 }
 
-function TopperList({ toppers, tier, board }) {
+const RANK_BADGES = ["🥇", "🥈", "🥉"];
+
+function TopperList({ toppers, tier, board, highlightName }) {
   if (!toppers || toppers.length === 0) {
     return (
       <p className="rounded-control border border-dashed border-rule px-4 py-8 text-center text-sm text-muted">
@@ -138,16 +155,19 @@ function TopperList({ toppers, tier, board }) {
 
   const countKey = board === "slap" ? "slap_count" : "rose_count";
   const emoji = board === "slap" ? "👋" : "🌹";
-  const accent = board === "slap" ? "text-slap" : "text-laurel";
+  const highlight = String(highlightName ?? "").trim().toLowerCase();
 
   return (
-    <ol>
+    <ol className="space-y-1.5">
       <AnimatePresence initial={false}>
         {toppers.map((topper, index) => {
           const name = topper.minister_name ?? topper.name;
           const secondary = formatSecondary(tier, topper);
           const count = topper[countKey] ?? 0;
           const rank = index + 1;
+          const badge = RANK_BADGES[index] ?? null;
+          const isCurrent =
+            highlight && String(name ?? "").trim().toLowerCase() === highlight;
 
           return (
             <motion.li
@@ -157,33 +177,49 @@ function TopperList({ toppers, tier, board }) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
               transition={{
-                duration: 0.22,
+                duration: 0.24,
                 delay: index * 0.03,
                 ease: [0.2, 0, 0, 1],
               }}
-              className="flex items-center gap-3 border-b border-rule py-3 last:border-b-0"
+              className={`flex items-center gap-3 rounded-card border px-3 py-2.5 ${
+                isCurrent
+                  ? "border-slap bg-slap-wash"
+                  : "border-transparent hover:border-rule hover:bg-paper/60"
+              }`}
             >
               <span
-                className={`w-6 shrink-0 text-right font-serif text-sm tabular-nums ${
-                  rank === 1 ? accent : "text-faint"
-                }`}
+                aria-label={`Rank ${rank}`}
+                className="flex w-9 shrink-0 items-center justify-center text-lg tabular-nums"
               >
-                {String(rank).padStart(2, "0")}
+                {badge ? (
+                  <span aria-hidden className="text-2xl leading-none">
+                    {badge}
+                  </span>
+                ) : (
+                  <span className="font-serif text-sm text-faint">
+                    {String(rank).padStart(2, "0")}
+                  </span>
+                )}
               </span>
 
               <CompactAvatar src={topper.photo_url} name={name} />
 
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-ink">{name}</p>
+                <p className="truncate text-sm font-medium text-ink">
+                  {name}
+                  {isCurrent && (
+                    <span className="ml-2 rounded-full bg-slap px-2 py-0.5 text-[10px] font-medium tracking-[0.05em] text-paper uppercase">
+                      You
+                    </span>
+                  )}
+                </p>
                 {secondary && (
                   <p className="truncate text-xs text-muted">{secondary}</p>
                 )}
               </div>
 
               <span className="flex shrink-0 items-baseline gap-1 tabular-nums">
-                <span className="text-sm font-medium">
-                  {count.toLocaleString("en-IN")}
-                </span>
+                <AnimatedCount value={count} />
                 <span aria-hidden className="text-xs">
                   {emoji}
                 </span>
@@ -193,6 +229,20 @@ function TopperList({ toppers, tier, board }) {
         })}
       </AnimatePresence>
     </ol>
+  );
+}
+
+function AnimatedCount({ value }) {
+  return (
+    <motion.span
+      key={value}
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.22, ease: [0.2, 0, 0, 1] }}
+      className="text-sm font-medium tabular-nums"
+    >
+      {Number(value).toLocaleString("en-IN")}
+    </motion.span>
   );
 }
 
@@ -207,17 +257,12 @@ function monogramOf(name) {
   ).toUpperCase();
 }
 
-/**
- * Circular 36×36 avatar for compact list rows. The card portraits stay
- * rectangular; this one is intentionally different because 10 tall rectangles
- * in a list read as sports cards rather than a ranking.
- */
 function CompactAvatar({ src, name }) {
   const [failed, setFailed] = useState(false);
   const showImage = Boolean(src) && !failed;
 
   return (
-    <div className="size-9 shrink-0 overflow-hidden rounded-full border border-rule bg-paper">
+    <div className="size-11 shrink-0 overflow-hidden rounded-full border border-rule bg-paper">
       {showImage ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -232,7 +277,7 @@ function CompactAvatar({ src, name }) {
       ) : (
         <span
           aria-hidden
-          className="flex size-full items-center justify-center font-serif text-xs text-faint"
+          className="flex size-full items-center justify-center font-serif text-sm text-faint"
         >
           {monogramOf(name)}
         </span>
@@ -243,14 +288,14 @@ function CompactAvatar({ src, name }) {
 
 function SkeletonRows() {
   return (
-    <ol className="animate-pulse">
+    <ol className="animate-pulse space-y-2">
       {Array.from({ length: 5 }, (_, i) => (
         <li
           key={i}
-          className="flex items-center gap-3 border-b border-rule py-3 last:border-b-0"
+          className="flex items-center gap-3 rounded-card px-3 py-2.5"
         >
-          <span className="w-6 shrink-0" />
-          <span className="size-9 shrink-0 rounded-full bg-rule" />
+          <span className="w-9 shrink-0" />
+          <span className="size-11 shrink-0 rounded-full bg-rule" />
           <span className="flex-1 space-y-1.5">
             <span
               className="block h-3 rounded bg-rule"
@@ -274,7 +319,6 @@ function titleCase(value) {
     .replace(/(?:^|[\s-])\S/g, (character) => character.toUpperCase());
 }
 
-/** Party · Constituency for MLAs/MPs; party · shortened portfolio for ministers. */
 function formatSecondary(tier, topper) {
   const party = topper.party?.trim();
   if (tier === "minister") {

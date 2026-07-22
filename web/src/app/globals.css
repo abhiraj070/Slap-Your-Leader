@@ -24,11 +24,12 @@
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-serif: var(--font-source-serif), Georgia, "Times New Roman", serif;
 
-  --radius-card: 10px;
-  --radius-control: 8px;
-  --radius-photo: 6px;
+  --radius-card: 14px;
+  --radius-control: 10px;
+  --radius-photo: 8px;
 
-  --shadow-card: 0 1px 2px rgb(23 23 26 / 0.04);
+  --shadow-card: 0 1px 2px rgb(23 23 26 / 0.05), 0 4px 12px -6px rgb(23 23 26 / 0.08);
+  --shadow-lift: 0 2px 6px rgb(23 23 26 / 0.06), 0 20px 40px -16px rgb(23 23 26 / 0.16);
 }
 
 html {
@@ -36,7 +37,12 @@ html {
 }
 
 body {
-  background-color: var(--color-paper);
+  background:
+    radial-gradient(1200px 800px at 12% 0%, #fbf8f3 0%, transparent 55%),
+    radial-gradient(900px 700px at 100% 15%, #f4efe6 0%, transparent 60%),
+    radial-gradient(700px 700px at 50% 100%, #f2ede4 0%, transparent 65%),
+    var(--color-paper);
+  background-attachment: fixed;
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;

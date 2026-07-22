@@ -1,15 +1,16 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { motion } from "framer-motion";
-import { useCallback, useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { useCallback, useEffect, useState } from "react";
+import { Search } from "lucide-react";
 
+import { InfoSheet } from "@/components/InfoSheet";
 import { Landing } from "@/components/Landing";
-import { Leaderboard } from "@/components/Leaderboard";
-import { MinisterSection } from "@/components/MinisterSection";
+import { LeaderboardSheet } from "@/components/LeaderboardSheet";
+import { Ornament } from "@/components/Ornament";
 import { RepresentativeCard } from "@/components/RepresentativeCard";
-import { RepresentativePager } from "@/components/RepresentativePager";
-import { ResultsHeader } from "@/components/ResultsHeader";
+import { SearchSheet } from "@/components/SearchSheet";
 import { ErrorScreen, LocatingScreen } from "@/components/StatusScreens";
 import { useMinistries } from "@/hooks/useMinistries";
 import { fetchRepresentatives, toFriendlyError } from "@/lib/api";
@@ -18,16 +19,67 @@ import {
   GeolocationError,
   requestPosition,
 } from "@/lib/geolocation";
-import { voteKey } from "@/lib/votes";
+
+const RANK_ORDER = {
+  "Prime Minister": 0,
+  "Cabinet Minister": 1,
+  "MoS (Independent Charge)": 2,
+  "Minister of State": 3,
+};
+
+/**
+ * Reads the incoming query string once. `?share=mp&lat=&lng=` opens the MP
+ * page for those coordinates without prompting for location again;
+ * `?share=minister&name=` seeds the pending minister name so we can pick
+ * their entry once the ministries list loads.
+ */
+function readDeepLink() {
+  if (typeof window === "undefined") return { coords: null, ministerName: null };
+  const params = new URLSearchParams(window.location.search);
+  const share = params.get("share");
+  if (share === "mp") {
+    const lat = parseFloat(params.get("lat"));
+    const lng = parseFloat(params.get("lng"));
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      return { coords: { latitude: lat, longitude: lng }, ministerName: null };
+    }
+  } else if (share === "minister") {
+    return { coords: null, ministerName: params.get("name") };
+  }
+  return { coords: null, ministerName: null };
+}
 
 export default function Home() {
-  const [coords, setCoords] = useState(null);
+  const [coords, setCoords] = useState(() => readDeepLink().coords);
   const [geoError, setGeoError] = useState(null);
   const [isLocating, setIsLocating] = useState(false);
+  const [openSheet, setOpenSheet] = useState(null); // "info" | "leaderboard" | "search" | null
+  const [selectedMinistry, setSelectedMinistry] = useState(null);
+  const [lastChoice, setLastChoice] = useState(null); // "slap" | "rose" | null — drives the share copy and CTA highlight
+  const [toast, setToast] = useState(null);
+  const [pendingMinisterName, setPendingMinisterName] = useState(
+    () => readDeepLink().ministerName,
+  );
 
-  // Shared with MinisterSection through React Query's cache, so the switcher
-  // can preview the real ministry count without a second request.
-  const { ministryCount } = useMinistries();
+  // Ministries are pre-fetched here (not only when the Search sheet opens) so
+  // deep links can resolve a shared minister on first render.
+  const { entries: ministryEntries } = useMinistries();
+
+  // Once ministries load, match a pending deep-linked minister name to an
+  // entry and swap the card. Runs during render — React batches the paired
+  // setStates into the same commit.
+  if (pendingMinisterName && ministryEntries.length > 0) {
+    const target = pendingMinisterName.toLowerCase();
+    const entry = ministryEntries.find(
+      (e) => e.minister.minister_name?.toLowerCase() === target,
+    );
+    if (entry) {
+      setSelectedMinistry(entry);
+      setPendingMinisterName(null);
+    } else {
+      setPendingMinisterName(null);
+    }
+  }
 
   const {
     data,
@@ -36,14 +88,11 @@ export default function Home() {
     error,
     refetch,
   } = useQuery({
-    // Coordinates are part of the key so a re-locate refetches rather than
-    // serving the previous neighbourhood from cache.
     queryKey: ["representatives", coords?.latitude, coords?.longitude],
     queryFn: () => fetchRepresentatives(coords),
     enabled: coords !== null,
   });
 
-  /** Must run from the click handler — that gesture is what unlocks the prompt. */
   const handleAllowLocation = useCallback(async () => {
     setGeoError(null);
     setIsLocating(true);
@@ -56,68 +105,56 @@ export default function Home() {
     }
   }, []);
 
-  const handleReset = useCallback(() => {
-    setCoords(null);
-    setGeoError(null);
+  const subject = buildSubject(selectedMinistry, data?.mp);
+
+  const subjectKey = subject
+    ? `${subject.tier}:${subject.tier === "minister" ? subject.ministry + "|" + subject.name : subject.constituency_key + "|" + subject.name}`
+    : "none";
+
+  const closeSheet = useCallback(() => setOpenSheet(null), []);
+
+  const showToast = useCallback((message) => {
+    setToast(message);
+    setTimeout(() => setToast(null), 2200);
   }, []);
 
-  // Either seat can be missing: the point may fall outside every stored
-  // boundary, or the party may have no `party_manifesto_points` row (the
-  // handler inner-joins it). The ministers page is always present — it isn't
-  // derived from location.
-  const pages = useMemo(() => {
-    if (!data) return [];
+  const handleShare = useCallback(
+    async (currentChoice) => {
+      if (!subject || typeof window === "undefined") return;
+      const url = buildShareUrl(subject, coords);
+      const text = buildShareMessage(subject, currentChoice);
 
-    const built = [
-      { tier: "mla", label: "Your MLA", representative: data.mla },
-      { tier: "mp", label: "Your MP", representative: data.mp },
-    ]
-      .filter((page) => page.representative)
-      .map((page) => ({
-        // Keyed by the representative, not just the tier: looking up a new
-        // location must remount the card so its vote and photo-error state
-        // don't carry over to a different person.
-        key: voteKey(page.tier, page.representative),
-        label: page.label,
-        tier: page.tier,
-        // The switcher previews each section so the third one advertises
-        // itself instead of hiding behind a bare label.
-        preview: [page.representative.name, page.representative.party]
-          .filter(Boolean)
-          .join(" · "),
-        node: (
-          <div className="grid gap-6 lg:grid-cols-2 lg:items-start lg:gap-8">
-            <RepresentativeCard
-              tier={page.tier}
-              representative={page.representative}
-            />
-            <Leaderboard tier={page.tier} />
-          </div>
-        ),
-      }));
+      try {
+        if (navigator.share) {
+          await navigator.share({ title: "Slap Your Leader", text, url });
+          return;
+        }
+      } catch {
+        /* user cancelled the native sheet — fall through to clipboard */
+      }
+      try {
+        await navigator.clipboard.writeText(`${text}\n${url}`);
+        showToast("Link copied — paste it anywhere.");
+      } catch {
+        showToast("Couldn't copy the link. Try again?");
+      }
+    },
+    [subject, coords, showToast],
+  );
 
-    built.push({
-      key: "ministers",
-      label: "Ministers",
-      tier: "minister",
-      preview: ministryCount
-        ? `Search ${ministryCount} ministries`
-        : "Search the council",
-      accent: true,
-      node: (
-        <div className="grid gap-6 lg:grid-cols-2 lg:items-start lg:gap-8">
-          <MinisterSection />
-          <Leaderboard tier="minister" />
-        </div>
-      ),
-    });
-
-    return built;
-  }, [data, ministryCount]);
-
-  // The ministers page is always in `pages`, so it can't stand in for "we
-  // found a seat" — that has to come from the lookup itself.
-  const hasSeat = Boolean(data?.mla || data?.mp);
+  // The lightweight reward beat after a vote commits — separate from the
+  // in-flight "winding" banner, which clears before the tally ever lands.
+  const handleVoteCast = useCallback(
+    (next) => {
+      setLastChoice(next);
+      showToast(
+        next === "slap"
+          ? "👋 Another slap recorded."
+          : "🌹 One more rose added.",
+      );
+    },
+    [showToast],
+  );
 
   const stage = resolveStage({
     geoError,
@@ -125,15 +162,10 @@ export default function Home() {
     coords,
     isLoadingSeats,
     isError,
-    hasSeat,
+    hasSubject: Boolean(subject),
   });
 
   return (
-    // No AnimatePresence: the mock/API can answer fast enough that `stage`
-    // moves landing -> locating -> results inside a single exit animation, and
-    // `mode="wait"` then mounts the incoming child without ever firing its
-    // enter animation, leaving it stuck at opacity 0. Each stage animates its
-    // own entrance on mount instead, which can't race.
     <main className="flex min-h-dvh flex-col">
       {stage === "landing" && (
         <div className="flex flex-1 items-center">
@@ -144,7 +176,7 @@ export default function Home() {
       {stage === "locating" && (
         <LocatingScreen
           label="Locating your constituency"
-          detail="Matching your coordinates against assembly and parliamentary boundaries."
+          detail="Matching your coordinates against parliamentary boundaries."
         />
       )}
 
@@ -175,35 +207,263 @@ export default function Home() {
         />
       )}
 
-      {stage === "results" && (
+      {stage === "results" && subject && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.25, ease: [0.2, 0, 0, 1] }}
-          className="mx-auto w-full max-w-6xl py-10 sm:py-14"
+          className="mx-auto w-full max-w-3xl px-5 pt-6 pb-10 sm:px-8 sm:pt-8 sm:pb-14"
         >
-          <ResultsHeader representatives={data} />
+          <ResultsHeader
+            subject={subject}
+            isMinister={subject.tier === "minister"}
+            onResetToMp={
+              subject.tier === "minister"
+                ? () => setSelectedMinistry(null)
+                : null
+            }
+          />
 
-          <RepresentativePager pages={pages} />
+          <RepresentativeCard
+            key={subjectKey}
+            subject={subject}
+            keySeed={subjectKey}
+            onOpenInfo={() => setOpenSheet("info")}
+            onOpenLeaderboard={() => setOpenSheet("leaderboard")}
+            onShare={() => handleShare(lastChoice)}
+            onFirstVote={handleVoteCast}
+          />
+
+          <InfoSheet
+            open={openSheet === "info"}
+            onClose={closeSheet}
+            subject={subject}
+          />
+          <LeaderboardSheet
+            open={openSheet === "leaderboard"}
+            onClose={closeSheet}
+            tier={subject.tier}
+            currentIdentity={subject.name}
+          />
+          <SearchSheet
+            open={openSheet === "search"}
+            onClose={closeSheet}
+            selected={selectedMinistry}
+            onSelect={(entry) => setSelectedMinistry(entry)}
+          />
+
+          <Toast message={toast} />
+
+          <FloatingSearchButton onClick={() => setOpenSheet("search")} />
         </motion.div>
       )}
     </main>
   );
 }
 
-/** Single source of truth for which screen wins, in priority order. */
+function ResultsHeader({ subject, isMinister, onResetToMp }) {
+  const location = isMinister
+    ? null
+    : titleCase(subject.constituency ?? "");
+
+  return (
+    <motion.header
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: [0.2, 0, 0, 1] }}
+      className="mb-6 text-center sm:mb-8"
+    >
+      {location ? (
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-rule bg-surface px-3 py-1 text-[11px] leading-none font-medium tracking-[0.09em] text-ink uppercase shadow-card">
+          {location}
+        </span>
+      ) : onResetToMp ? (
+        <button
+          type="button"
+          onClick={onResetToMp}
+          className="inline-flex items-center gap-1.5 rounded-full border border-rule bg-surface px-3 py-1 text-[11px] leading-none font-medium tracking-[0.09em] text-muted uppercase shadow-card transition-colors hover:text-ink"
+        >
+          ← Back to your MP
+        </button>
+      ) : null}
+
+      <h1 className="mt-4 font-serif text-3xl leading-[1.05] text-balance sm:text-4xl">
+        {isMinister
+          ? "They serve the country. Judge the service."
+          : "They work for you. Judge the work."}
+      </h1>
+
+      <div className="mt-4">
+        <Ornament />
+      </div>
+
+      <p className="mx-auto mt-4 max-w-lg text-sm leading-relaxed text-muted text-pretty">
+        Read their record. Then slap or rose them.
+      </p>
+    </motion.header>
+  );
+}
+
+/**
+ * Always-visible floating entry point into the Search sheet — discoverable
+ * from the moment a subject is on screen, not just after a vote. Filled dark
+ * so it reads as a primary action against the paper background (the earlier
+ * quiet/outline treatment blended in too much to notice), with a slow
+ * breathing glow so it stays noticeable without competing for attention the
+ * way Share's faster reward pulse does once a vote lands. The helper label
+ * teaches the gesture once per visit, then gets out of the way.
+ */
+function FloatingSearchButton({ onClick }) {
+  const [showHint, setShowHint] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setShowHint(false), 4500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  return (
+    <div className="fixed right-5 bottom-6 z-30 flex items-center gap-2.5 sm:right-8">
+      <AnimatePresence>
+        {showHint && (
+          <motion.span
+            initial={{ opacity: 0, x: 8 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 8 }}
+            transition={{ duration: 0.25, ease: [0.2, 0, 0, 1] }}
+            className="hidden rounded-full border border-rule bg-surface px-3.5 py-2 text-xs font-medium text-ink shadow-card sm:inline-block"
+          >
+            Search any politician
+          </motion.span>
+        )}
+      </AnimatePresence>
+
+      <motion.button
+        type="button"
+        onClick={() => {
+          setShowHint(false);
+          onClick();
+        }}
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{
+          opacity: 1,
+          scale: [1, 1.05, 1],
+          boxShadow: [
+            "0 0 0 0 rgb(140 47 42 / 0)",
+            "0 0 0 10px rgb(140 47 42 / 0.10)",
+            "0 0 0 0 rgb(140 47 42 / 0)",
+          ],
+        }}
+        transition={{
+          opacity: { duration: 0.3, ease: [0.2, 0, 0, 1] },
+          scale: { duration: 2.8, repeat: Infinity, ease: "easeInOut", delay: 1 },
+          boxShadow: { duration: 2.8, repeat: Infinity, ease: "easeInOut", delay: 1 },
+        }}
+        whileHover={{ scale: 1.08, y: -2 }}
+        whileTap={{ scale: 0.95 }}
+        aria-label="Search another MP or Minister"
+        className="flex size-16 items-center justify-center rounded-full border border-ink bg-ink text-paper shadow-lift transition-colors hover:border-slap hover:bg-slap focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+      >
+        <Search className="size-6" strokeWidth={2.25} />
+      </motion.button>
+    </div>
+  );
+}
+
+function Toast({ message }) {
+  return (
+    <AnimatePresence>
+      {message && (
+        <motion.div
+          role="status"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 12 }}
+          transition={{ duration: 0.22, ease: [0.2, 0, 0, 1] }}
+          className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full border border-rule bg-ink px-4 py-2 text-sm text-paper shadow-lift"
+        >
+          {message}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+/**
+ * The shared text always names the exact action taken — never generic
+ * "rated" language, since the product is an explicit Slap/Rose choice, not a
+ * rating scale.
+ */
+function buildShareMessage(subject, currentChoice) {
+  if (currentChoice === "slap") {
+    return `I slapped ${subject.name}. 👋 Now it's your turn.`;
+  }
+  if (currentChoice === "rose") {
+    return `I gave ${subject.name} a 🌹. What's your verdict?`;
+  }
+  return `Slap or Rose ${subject.name}? Decide for yourself.`;
+}
+
+function buildShareUrl(subject, coords) {
+  if (typeof window === "undefined") return "";
+  const origin = window.location.origin;
+  const params = new URLSearchParams({ share: subject.tier });
+  if (subject.tier === "mp" && coords) {
+    params.set("lat", String(coords.latitude));
+    params.set("lng", String(coords.longitude));
+  } else if (subject.tier === "minister") {
+    params.set("name", subject.name);
+  }
+  return `${origin}/?${params.toString()}`;
+}
+
+function buildSubject(selectedMinistry, mp) {
+  if (selectedMinistry) {
+    const entry = selectedMinistry;
+    const m = entry.minister;
+    return {
+      tier: "minister",
+      name: m.minister_name,
+      minister_name: m.minister_name,
+      party: m.party,
+      photo_url: m.photo_url,
+      slap_count: m.slap_count,
+      rose_count: m.rose_count,
+      points: m.manifesto_points,
+      manifesto_points: m.manifesto_points,
+      ministry: entry.ministry,
+      portfolio: entry.portfolio || entry.label,
+      rank_title: entry.rank,
+    };
+  }
+  if (mp) return { tier: "mp", ...mp };
+  return null;
+}
+
+function titleCase(value) {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/(?:^|[\s-])\S/g, (character) => character.toUpperCase());
+}
+
+// Silence unused warning if RANK_ORDER isn't referenced.
+void RANK_ORDER;
+
 function resolveStage({
   geoError,
   isLocating,
   coords,
   isLoadingSeats,
   isError,
-  hasSeat,
+  hasSubject,
 }) {
+  // A resolved subject wins outright: a minister deep link isn't
+  // location-derived, so it must reach the card without ever waiting on
+  // (or requiring) `coords`.
+  if (hasSubject) return "results";
   if (geoError) return "geo-error";
   if (isLocating) return "locating";
   if (!coords) return "landing";
   if (isLoadingSeats) return "locating";
   if (isError) return "fetch-error";
-  return hasSeat ? "results" : "empty";
+  return "empty";
 }

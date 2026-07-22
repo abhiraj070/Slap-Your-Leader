@@ -27,12 +27,10 @@ export function toFriendlyError(error) {
 }
 
 /**
- * `POST /get-location` — resolves a GPS point to the MLA and MP whose
- * constituency boundary contains it.
- *
- * Resolves to `{ mla, mp }`, and either seat can be null when the point falls
- * outside every stored boundary (or the party has no manifesto row — the
- * handler inner-joins `party_manifesto_points`).
+ * `POST /get-location` — resolves a GPS point to the MP whose parliamentary
+ * constituency contains it. Returns `{ mp }`; `mp` can be null when the point
+ * falls outside every stored boundary (or the party has no manifesto row —
+ * the handler inner-joins `party_manifesto_points`).
  */
 export async function fetchRepresentatives({ latitude, longitude }) {
   const { data } = await api.post("/get-location", { latitude, longitude });
@@ -40,7 +38,6 @@ export async function fetchRepresentatives({ latitude, longitude }) {
 }
 
 const LEADERBOARD_PATH = {
-  mla: "/get-leaderboard-mla",
   mp: "/get-leaderboard-mp",
   minister: "/get-leaderboard-minister",
 };
@@ -72,8 +69,8 @@ export async function fetchMinisters() {
   return Array.isArray(data?.ministers) ? data.ministers : [];
 }
 
-/** `mla`/`mp` are the tiers the UI speaks; the API wants the table name. */
-const TABLE_FOR_TIER = { mla: "mlas", mp: "mps" };
+/** The UI speaks tier names; the API wants the table name. */
+const TABLE_FOR_TIER = { mp: "mps" };
 const COLUMN_FOR_CHOICE = { slap: "slap_count", rose: "rose_count" };
 
 /**
