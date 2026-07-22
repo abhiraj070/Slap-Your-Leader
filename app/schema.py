@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic import BaseModel
 
 
@@ -7,7 +9,9 @@ class LocationRequest(BaseModel):
 
 
 class MinistrySearchRequest(BaseModel):
-    name: str
+    # Optional: omit it to get the whole council of ministers, which is what
+    # the web client's ministry picker loads once up front.
+    name: Optional[str] = None
 
 class UpdateMemberRequest(BaseModel):
     table_to_update: str

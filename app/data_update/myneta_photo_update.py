@@ -162,9 +162,20 @@ def discover_current_term_winners_url(state: str) -> str | None:
     return dataset_slug, f"{BASE_URL}/{dataset_slug}/index.php?action=show_winners&sort=default"
 
 
+# MyNeta's own spelling for this state ("Chattisgarh", one 'h') doesn't match
+# the corrected state_key our mlas rows actually use ("CHHATTISGARH", from
+# the same alias fix applied in update_details.py) -- without this, the
+# lookup below silently finds zero rows and the whole state gets skipped as
+# if it had no gaps, when in fact it was never queried at all.
+STATE_KEY_ALIASES = {
+    "CHATTISGARH": "CHHATTISGARH",
+}
+
+
 def update_mla_photos_for_state(state: str) -> None:
     with engine.connect() as conn:
         state_key = normalize(state)
+        state_key = STATE_KEY_ALIASES.get(state_key, state_key)
         target_mlas = conn.execute(text(
             "SELECT id, name, constituency_key FROM mlas WHERE state_key = :state_key AND photo_url IS NULL"
         ), {"state_key": state_key}).fetchall()

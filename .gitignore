@@ -9,4 +9,4 @@ wheels/
 .venv
 .env
 *.iml
-.idea/
+.idea/boundaries/eci-2026/*.geojson

@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+/*
+ * Editorial dossier theme. Light-only by design: the paper ground is the
+ * point, so we don't opt into `prefers-color-scheme: dark`.
+ *
+ * The two verdict accents are named `slap` and `laurel` rather than
+ * slap/rose — Tailwind already ships a `rose-*` palette, and shadowing it
+ * would make `bg-rose` ambiguous.
+ */
+@theme {
+  --color-paper: #f7f5f1;
+  --color-surface: #ffffff;
+  --color-ink: #17171a;
+  --color-muted: #6b6862;
+  --color-faint: #b3aea4;
+  --color-rule: #e2ded7;
+
+  --color-slap: #8c2f2a;
+  --color-slap-wash: #f5eae8;
+  --color-laurel: #3f5f4a;
+  --color-laurel-wash: #eaefea;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-source-serif), Georgia, "Times New Roman", serif;
+
+  --radius-card: 10px;
+  --radius-control: 8px;
+  --radius-photo: 6px;
+
+  --shadow-card: 0 1px 2px rgb(23 23 26 / 0.04);
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Uppercase micro-label used for every field name and section head. */
+.eyebrow {
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+/* The mobile pager scrolls horizontally; the dots are the affordance,
+   so the native bar would only add clutter. */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Respect users who ask the OS to cut motion — Framer Motion reads this too. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,5 +1,29 @@
 # Boundary Data — Source & Quality Notes
 
+## UPDATE (2026-07-22): both layers replaced — see `eci-2026/`
+
+The two shapefile sources below are **superseded** and kept only for reference.
+The live DB now uses `eci-2026/`:
+
+- `eci-2026/assembly_constituencies_eci2026.geojson` — 4,122 ACs, "Release 2026 by ECI"
+  via Esri India Living Atlas (`livingatlas.esri.in`, service
+  `Legislative_Assembly_Boundaries_2022/MapServer/0`, item modified 2026-04).
+  Post-delimitation everywhere: J&K 90 (2022 order), Assam 126 (2023 order),
+  Jharkhand 81, Telangana split from AP, Manipur 60. Sikkim's non-territorial
+  Sangha seat has no polygon (31 mapped + 1 seat). Code-0 / "Data Not Available"
+  filler features and non-assembly UTs were dropped before load.
+- `eci-2026/parliamentary_constituencies_2024.geojson` — 543 PCs via the same
+  server (`IAB2024/IN_Parliamentary_2024/MapServer/0`). Post-2022 J&K PCs
+  (incl. Anantnag-Rajouri). Assam's 5 renamed PCs were stored under their
+  post-2023 names (Sonitpur, Darrang-Udalguri, Kaziranga, Nagaon, Diphu) —
+  note their polygons are the pre-2023 footprints, the closest public GIS
+  data available; boundary-adjacent precision in Assam is approximate.
+
+Old tables are retained in the DB as `assembly_constituencies_old` /
+`parliamentary_constituencies_old` backups.
+
+---
+
 Source: DataMeet Community Maps (`github.com/datameet/maps`), CC-BY 2.5 India license. Attribution required if used publicly: "Maps provided by Data{Meet} Community Maps Project, under CC-BY 2.5 India."
 
 ## Parliamentary Constituencies (Lok Sabha) — GOOD, use this one with confidence
