@@ -19,10 +19,11 @@ export function Button({
 }) {
   return (
     <motion.button
-      whileTap={disabled ? undefined : { y: 1 }}
-      transition={{ duration: 0.12, ease: [0.2, 0, 0, 1] }}
+      whileHover={disabled ? undefined : { y: -1 }}
+      whileTap={disabled ? undefined : { y: 1, scale: 0.98 }}
+      transition={{ duration: 0.15, ease: [0.2, 0, 0, 1] }}
       disabled={disabled}
-      className={`inline-flex items-center justify-center gap-2 rounded-control px-5 py-3 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${VARIANTS[variant]} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-control px-5 py-3 text-sm shadow-card transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none ${VARIANTS[variant]} ${className}`}
       {...props}
     />
   );

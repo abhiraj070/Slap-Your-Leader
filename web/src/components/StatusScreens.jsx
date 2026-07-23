@@ -19,14 +19,14 @@ export function LocatingScreen({ label, detail }) {
       </h2>
       <p className="mt-2 text-sm leading-relaxed text-muted">{detail}</p>
 
-      {/* An indeterminate sweep along a hairline — the quietest possible
-          progress cue, and it costs nothing on the main thread. */}
+      {/* An indeterminate sweep — the quietest possible progress cue, and it
+          costs nothing on the main thread. */}
       <div
         role="presentation"
-        className="mt-7 h-px w-full overflow-hidden bg-rule"
+        className="mt-8 h-1.5 w-full overflow-hidden rounded-full bg-rule"
       >
         <motion.div
-          className="h-full w-1/3 bg-ink"
+          className="h-full w-1/3 rounded-full bg-gradient-to-r from-laurel to-slap"
           animate={{ x: ["-100%", "300%"] }}
           transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
         />

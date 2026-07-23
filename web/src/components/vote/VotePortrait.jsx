@@ -3,7 +3,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 
 import { Portrait } from "../ui/Portrait";
-import { IMPACT_MS } from "@/hooks/useVoteChoreography";
+import { IMPACT_MS, IMPACT_X, IMPACT_Y } from "@/hooks/useVoteChoreography";
 
 /**
  * The portrait, wrapped so it can swell, recoil, and carry impact effects.
@@ -46,9 +46,20 @@ export function VotePortrait({
  * Lands on the cheek that was actually struck: travelling left-to-right means
  * the blow arrives on the viewer's left. A quick white flash sells the contact,
  * a ring carries the force outward, and the flush lingers and fades.
+ *
+ * Centred (via `x`/`y` percentage transforms rather than the box's own
+ * top/left corner) on `IMPACT_X`/`IMPACT_Y` — the exact point
+ * `useVoteChoreography`'s `measure()` throws the hand at, so the thrown hand
+ * and the mark it leaves can never drift apart again.
  */
 function SlapImpact({ direction }) {
-  const side = direction === 1 ? { left: "14%" } : { right: "14%" };
+  const side = {
+    [direction === 1 ? "left" : "right"]: `${
+      (direction === 1 ? IMPACT_X : 1 - IMPACT_X) * 100
+    }%`,
+    top: `${IMPACT_Y * 100}%`,
+  };
+  const recenter = { x: "-50%", y: "-50%" };
 
   return (
     <>
@@ -64,21 +75,25 @@ function SlapImpact({ direction }) {
       <motion.span
         aria-hidden
         style={side}
-        initial={{ opacity: 0, scale: 0.2 }}
-        animate={{ opacity: [0, 0.7, 0], scale: [0.2, 1.6, 2.2] }}
+        initial={{ opacity: 0, scale: 0.2, ...recenter }}
+        animate={{ opacity: [0, 0.7, 0], scale: [0.2, 1.6, 2.2], ...recenter }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.42, ease: "easeOut" }}
-        className="absolute top-[36%] size-[34%] rounded-full border-2 border-slap"
+        className="absolute size-[34%] rounded-full border-2 border-slap"
       />
 
       <motion.span
         aria-hidden
         style={side}
-        initial={{ opacity: 0, scale: 0.5 }}
-        animate={{ opacity: [0, 0.62, 0.5, 0], scale: [0.5, 1.05, 1.15, 1.25] }}
+        initial={{ opacity: 0, scale: 0.5, ...recenter }}
+        animate={{
+          opacity: [0, 0.62, 0.5, 0],
+          scale: [0.5, 1.05, 1.15, 1.25],
+          ...recenter,
+        }}
         exit={{ opacity: 0 }}
         transition={{ duration: (IMPACT_MS + 260) / 1000, ease: "easeOut" }}
-        className="absolute top-[34%] size-[42%] rounded-full bg-slap blur-[10px]"
+        className="absolute size-[42%] rounded-full bg-slap blur-[10px]"
       />
     </>
   );

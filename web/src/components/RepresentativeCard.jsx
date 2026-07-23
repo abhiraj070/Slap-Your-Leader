@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useRef } from "react";
-import { Info, Share2, Trophy } from "lucide-react";
+import { Info, Share2 } from "lucide-react";
 
 import { VoteAnnouncement } from "./vote/VoteAnnouncement";
 import { VoteFlight } from "./vote/VoteFlight";
@@ -11,8 +11,11 @@ import { VoteButtons } from "./VoteButtons";
 import { useVote } from "@/hooks/useVote";
 import { useVoteChoreography } from "@/hooks/useVoteChoreography";
 
-const DESIGNATION = {
-  mp: "Your MP",
+const ROLE_LABEL = {
+  // Only the home MP (resolved from the user's own location) is "yours" —
+  // one tapped in from the leaderboard is someone else's, so it falls back
+  // to the plain title rather than misrepresenting whose seat it is.
+  mp: (subject) => (subject?.isHome ? "Your MP" : "Member of Parliament"),
   minister: (subject) => subject?.rank_title || "Union Minister",
 };
 
@@ -24,7 +27,6 @@ export function RepresentativeCard({
   subject,
   keySeed,
   onOpenInfo,
-  onOpenLeaderboard,
   onShare,
   onFirstVote,
 }) {
@@ -38,12 +40,7 @@ export function RepresentativeCard({
   const slaps = (subject.slap_count ?? 0) + (choice === "slap" ? casts : 0);
   const roses = (subject.rose_count ?? 0) + (choice === "rose" ? casts : 0);
 
-  const designation =
-    subject.tier === "minister"
-      ? typeof DESIGNATION.minister === "function"
-        ? DESIGNATION.minister(subject)
-        : DESIGNATION.minister
-      : DESIGNATION[subject.tier];
+  const role = ROLE_LABEL[subject.tier]?.(subject);
 
   return (
     <motion.article
@@ -53,7 +50,7 @@ export function RepresentativeCard({
       exit={{ opacity: 0, y: -8 }}
       transition={{ duration: 0.32, delay: 0.08, ease: [0.2, 0, 0, 1] }}
       ref={stageRef}
-      className="relative overflow-visible rounded-card border border-rule bg-surface p-6 shadow-lift transition-shadow duration-300 sm:p-8"
+      className="relative overflow-visible rounded-card bg-surface p-7 shadow-lift transition-shadow duration-300 sm:p-10"
     >
       {onOpenInfo && (
         <div className="absolute top-4 left-4 sm:top-5 sm:left-5">
@@ -85,33 +82,20 @@ export function RepresentativeCard({
           />
         </motion.div>
 
-        <p className="eyebrow mt-6">{designation}</p>
+        <p className="eyebrow mt-6">{role}</p>
 
         <h2 className="mt-2 font-serif text-3xl leading-tight text-balance text-ink sm:text-4xl">
           {subject.name}
         </h2>
 
-        <p className="mt-2 text-sm text-muted">
-          Your take on them, in two taps.
-        </p>
+        {subject.designation && (
+          <p className="mt-2 text-base font-medium text-ink/80 text-balance">
+            {subject.designation}
+          </p>
+        )}
       </div>
 
-      <div className="mx-auto mt-8 max-w-md">
-        {onOpenLeaderboard && (
-          <div className="mb-4 flex justify-center">
-            <motion.button
-              type="button"
-              onClick={onOpenLeaderboard}
-              whileHover={{ y: -1 }}
-              whileTap={{ y: 1 }}
-              transition={{ duration: 0.15, ease: [0.2, 0, 0, 1] }}
-              className="inline-flex items-center gap-1.5 rounded-full border border-rule bg-paper/70 px-3.5 py-1.5 text-xs font-medium tracking-[0.05em] text-ink uppercase transition-colors hover:border-ink hover:text-slap focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
-            >
-              <Trophy className="size-3.5" strokeWidth={2} />
-              Leaderboard
-            </motion.button>
-          </div>
-        )}
+      <div className="mx-auto mt-9 max-w-md">
         <VoteButtons
           choice={choice}
           slapCount={slaps}
@@ -161,10 +145,8 @@ export function IconAction({
       whileHover={{ scale: 1.08 }}
       whileTap={{ scale: 0.94 }}
       transition={{ type: "spring", stiffness: 420, damping: 22 }}
-      className={`relative ${dimensions} flex shrink-0 items-center justify-center rounded-full border shadow-card transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink ${
-        highlight
-          ? "border-slap bg-slap text-paper"
-          : "border-rule bg-surface text-ink hover:border-ink hover:text-slap"
+      className={`relative ${dimensions} flex shrink-0 items-center justify-center rounded-full shadow-card transition-shadow hover:shadow-lift focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink ${
+        highlight ? "bg-slap text-paper" : "bg-surface text-ink hover:text-slap"
       }`}
     >
       {highlight && (

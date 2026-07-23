@@ -1,117 +1,142 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
+import { Loader2 } from "lucide-react";
 import { useId, useState } from "react";
 
 import { useLeaderboard } from "@/hooks/useLeaderboard";
 import { toFriendlyError } from "@/lib/api";
 
 const TIER_COPY = {
-  mp: {
-    title: "Pan India ranking",
-    scope: "Lok Sabha constituencies across India",
-  },
-  minister: {
-    title: "Pan India ranking",
-    scope: "The union council of ministers",
-  },
+  mp: { scope: "Lok Sabha constituencies across India" },
+  minister: { scope: "The union council of ministers" },
 };
 
-const OPTIONS = [
-  { value: "slap", emoji: "👋", label: "Slap toppers", accent: "text-slap" },
-  { value: "rose", emoji: "🌹", label: "Rose toppers", accent: "text-laurel" },
+const TIERS = [
+  { value: "mp", label: "MPs" },
+  { value: "minister", label: "Ministers" },
+];
+
+const BOARDS = [
+  { value: "slap", emoji: "👋", label: "Slap toppers" },
+  { value: "rose", emoji: "🌹", label: "Rose toppers" },
 ];
 
 /**
- * A tier-specific ranking.
+ * The full leaderboard: two top-level sections — MPs and Ministers — each
+ * with its own Slap/Rose sub-tabs underneath. That's four independent,
+ * independently-paginated rankings in total; switching either tab swaps
+ * which one is on screen, it doesn't merge or reset the others.
  *
- * When rendered inside a bottom sheet the caller passes `forceEnabled` so the
- * query fires immediately on open (instead of needing a visitation signal). If
- * the caller passes `highlightName`, that row is emphasised — useful for
- * showing the reader where the currently-selected representative stands.
+ * `defaultTier` opens on whichever tier the current representative belongs
+ * to. `highlightName` emphasises that representative's own row wherever it
+ * appears — it simply won't match on the other tier's rows.
+ *
+ * `onSelectTopper(tier, topper)` — when provided, every row becomes tappable
+ * and opens that person's full profile (handled by the caller). `pendingKey`
+ * marks the one row currently being fetched, formatted `"${tier}:${name}"`.
  */
 export function Leaderboard({
-  tier,
-  forceEnabled = false,
+  defaultTier = "mp",
   highlightName = null,
-  chromeless = false,
+  onSelectTopper,
+  pendingKey,
 }) {
+  const [tier, setTier] = useState(defaultTier);
   const [board, setBoard] = useState("slap");
-  const query = useLeaderboard(tier, forceEnabled);
-
-  const copy = TIER_COPY[tier];
-  const toppers =
-    board === "slap" ? query.data?.slapToppers : query.data?.roseToppers;
-  const isLoading = !forceEnabled || query.isPending;
-
-  const body = (
-    <>
-      {!chromeless && (
-        <header className="border-b border-rule p-5 sm:p-6">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="min-w-0">
-              <p className="eyebrow">Leaderboard</p>
-              <h3 className="mt-1 font-serif text-xl leading-tight text-balance sm:text-2xl">
-                {copy?.title ?? "Pan India ranking"}
-              </h3>
-              <p className="mt-1 text-xs text-muted">{copy?.scope}</p>
-            </div>
-
-            <SubTabs value={board} onChange={setBoard} />
-          </div>
-        </header>
-      )}
-
-      {chromeless && (
-        <div className="mt-1 mb-3 flex justify-center">
-          <SubTabs value={board} onChange={setBoard} />
-        </div>
-      )}
-
-      <div className={chromeless ? "pt-2" : "p-5 sm:p-6"}>
-        {isLoading && <SkeletonRows />}
-
-        {forceEnabled && query.isError && (
-          <p
-            role="alert"
-            className="rounded-control border border-rule px-4 py-3 text-sm text-slap"
-          >
-            {toFriendlyError(query.error)}
-          </p>
-        )}
-
-        {forceEnabled && !query.isPending && !query.isError && (
-          <TopperList
-            toppers={toppers}
-            tier={tier}
-            board={board}
-            highlightName={highlightName}
-          />
-        )}
-      </div>
-    </>
-  );
-
-  if (chromeless) return <div>{body}</div>;
 
   return (
-    <section className="overflow-hidden rounded-card border border-rule bg-surface shadow-card">
-      {body}
-    </section>
+    <div>
+      <div className="flex justify-center">
+        <PillTabs
+          options={TIERS}
+          value={tier}
+          onChange={setTier}
+          ariaLabel="Leaderboard tier"
+        />
+      </div>
+
+      <p className="mt-2 text-center text-xs text-muted">
+        {TIER_COPY[tier]?.scope}
+      </p>
+
+      <div className="mt-4 flex justify-center">
+        <PillTabs
+          options={BOARDS}
+          value={board}
+          onChange={setBoard}
+          ariaLabel="Leaderboard board"
+        />
+      </div>
+
+      <div className="mt-4">
+        <TierBoard
+          tier={tier}
+          board={board}
+          highlightName={highlightName}
+          onSelectTopper={onSelectTopper}
+          pendingKey={pendingKey}
+        />
+      </div>
+    </div>
   );
 }
 
-function SubTabs({ value, onChange }) {
+/** One of the four independent (tier, board) rankings. */
+function TierBoard({ tier, board, highlightName, onSelectTopper, pendingKey }) {
+  const query = useLeaderboard(tier, board, true);
+
+  return (
+    <div>
+      {query.isPending && <SkeletonRows />}
+
+      {query.isError && (
+        <p
+          role="alert"
+          className="rounded-control border border-rule px-4 py-3 text-sm text-slap"
+        >
+          {toFriendlyError(query.error)}
+        </p>
+      )}
+
+      {!query.isPending && !query.isError && (
+        <>
+          <TopperList
+            toppers={query.toppers}
+            tier={tier}
+            board={board}
+            highlightName={highlightName}
+            onSelectTopper={onSelectTopper}
+            pendingKey={pendingKey}
+          />
+          {query.hasNextPage && (
+            <button
+              type="button"
+              onClick={() => query.fetchNextPage()}
+              disabled={query.isFetchingNextPage}
+              className="mt-3 w-full rounded-control border border-rule py-2.5 text-xs font-medium tracking-[0.05em] text-ink uppercase transition-colors hover:border-ink disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {query.isFetchingNextPage ? "Loading…" : "Load more"}
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** A pill-switcher, reused for both the tier tabs and the board sub-tabs. */
+function PillTabs({ options, value, onChange, ariaLabel }) {
   const instanceId = useId();
   const pillId = `lb-pill-${instanceId}`;
 
   return (
     <div
       role="tablist"
-      aria-label="Leaderboard board"
+      aria-label={ariaLabel}
       className="relative inline-flex shrink-0 rounded-control border border-rule bg-paper p-0.5"
     >
-      {OPTIONS.map((option) => {
+      {options.map((option) => {
         const isActive = value === option.value;
         return (
           <button
@@ -123,7 +148,7 @@ function SubTabs({ value, onChange }) {
             className="relative z-10 flex items-center gap-1.5 rounded-[6px] px-3 py-1.5 text-xs font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
             style={{ color: isActive ? "var(--color-ink)" : "var(--color-muted)" }}
           >
-            <span aria-hidden>{option.emoji}</span>
+            {option.emoji && <span aria-hidden>{option.emoji}</span>}
             {option.label}
             {isActive && (
               <motion.span
@@ -142,7 +167,7 @@ function SubTabs({ value, onChange }) {
 
 const RANK_BADGES = ["🥇", "🥈", "🥉"];
 
-function TopperList({ toppers, tier, board, highlightName }) {
+function TopperList({ toppers, tier, board, highlightName, onSelectTopper, pendingKey }) {
   if (!toppers || toppers.length === 0) {
     return (
       <p className="rounded-control border border-dashed border-rule px-4 py-8 text-center text-sm text-muted">
@@ -153,8 +178,6 @@ function TopperList({ toppers, tier, board, highlightName }) {
     );
   }
 
-  const countKey = board === "slap" ? "slap_count" : "rose_count";
-  const emoji = board === "slap" ? "👋" : "🌹";
   const highlight = String(highlightName ?? "").trim().toLowerCase();
 
   return (
@@ -163,11 +186,12 @@ function TopperList({ toppers, tier, board, highlightName }) {
         {toppers.map((topper, index) => {
           const name = topper.minister_name ?? topper.name;
           const secondary = formatSecondary(tier, topper);
-          const count = topper[countKey] ?? 0;
           const rank = index + 1;
           const badge = RANK_BADGES[index] ?? null;
           const isCurrent =
             highlight && String(name ?? "").trim().toLowerCase() === highlight;
+          const rowKey = `${tier}:${name}`;
+          const isPending = pendingKey === rowKey;
 
           return (
             <motion.li
@@ -181,49 +205,64 @@ function TopperList({ toppers, tier, board, highlightName }) {
                 delay: index * 0.03,
                 ease: [0.2, 0, 0, 1],
               }}
-              className={`flex items-center gap-3 rounded-card border px-3 py-2.5 ${
-                isCurrent
-                  ? "border-slap bg-slap-wash"
-                  : "border-transparent hover:border-rule hover:bg-paper/60"
-              }`}
             >
-              <span
-                aria-label={`Rank ${rank}`}
-                className="flex w-9 shrink-0 items-center justify-center text-lg tabular-nums"
+              <button
+                type="button"
+                onClick={() => onSelectTopper?.(tier, topper)}
+                disabled={!onSelectTopper || isPending}
+                aria-label={`View ${name}'s profile`}
+                className={`flex w-full items-center gap-3 rounded-card border px-3 py-2.5 text-left transition-colors disabled:cursor-wait ${
+                  isCurrent
+                    ? "border-slap bg-slap-wash"
+                    : "border-transparent hover:border-rule hover:bg-paper/60"
+                } ${isPending ? "opacity-60" : ""}`}
               >
-                {badge ? (
-                  <span aria-hidden className="text-2xl leading-none">
-                    {badge}
-                  </span>
-                ) : (
-                  <span className="font-serif text-sm text-faint">
-                    {String(rank).padStart(2, "0")}
-                  </span>
-                )}
-              </span>
-
-              <CompactAvatar src={topper.photo_url} name={name} />
-
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-ink">
-                  {name}
-                  {isCurrent && (
-                    <span className="ml-2 rounded-full bg-slap px-2 py-0.5 text-[10px] font-medium tracking-[0.05em] text-paper uppercase">
-                      You
+                <span
+                  aria-label={`Rank ${rank}`}
+                  className="flex w-9 shrink-0 items-center justify-center text-lg tabular-nums"
+                >
+                  {isPending ? (
+                    <Loader2
+                      aria-hidden
+                      className="size-4 animate-spin text-muted"
+                    />
+                  ) : badge ? (
+                    <span aria-hidden className="text-2xl leading-none">
+                      {badge}
+                    </span>
+                  ) : (
+                    <span className="font-serif text-sm text-faint">
+                      {String(rank).padStart(2, "0")}
                     </span>
                   )}
-                </p>
-                {secondary && (
-                  <p className="truncate text-xs text-muted">{secondary}</p>
-                )}
-              </div>
-
-              <span className="flex shrink-0 items-baseline gap-1 tabular-nums">
-                <AnimatedCount value={count} />
-                <span aria-hidden className="text-xs">
-                  {emoji}
                 </span>
-              </span>
+
+                <CompactAvatar src={topper.photo_url} name={name} />
+
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-ink">
+                    {name}
+                  </p>
+                  {secondary && (
+                    <p className="truncate text-xs text-muted">{secondary}</p>
+                  )}
+                </div>
+
+                <div className="flex shrink-0 items-center gap-3">
+                  <Metric
+                    value={topper.slap_count ?? 0}
+                    emoji="👋"
+                    emphasize={board === "slap"}
+                    accentClass="text-slap"
+                  />
+                  <Metric
+                    value={topper.rose_count ?? 0}
+                    emoji="🌹"
+                    emphasize={board === "rose"}
+                    accentClass="text-laurel"
+                  />
+                </div>
+              </button>
             </motion.li>
           );
         })}
@@ -232,14 +271,40 @@ function TopperList({ toppers, tier, board, highlightName }) {
   );
 }
 
-function AnimatedCount({ value }) {
+/**
+ * One count with its glyph. Both metrics show on every row now — the board
+ * that's currently active gets the bigger, coloured treatment; the other
+ * stays small and muted rather than disappearing, so a leader's overall
+ * standing reads at a glance without switching tabs.
+ */
+function Metric({ value, emoji, emphasize, accentClass }) {
+  return (
+    <span
+      className={`flex items-baseline gap-1 ${emphasize ? accentClass : "text-muted"}`}
+    >
+      <AnimatedCount
+        value={value}
+        className={
+          emphasize
+            ? "text-base font-semibold tabular-nums"
+            : "text-xs font-medium tabular-nums"
+        }
+      />
+      <span aria-hidden className={emphasize ? "text-sm" : "text-[10px]"}>
+        {emoji}
+      </span>
+    </span>
+  );
+}
+
+function AnimatedCount({ value, className }) {
   return (
     <motion.span
       key={value}
       initial={{ opacity: 0, y: -4 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.22, ease: [0.2, 0, 0, 1] }}
-      className="text-sm font-medium tabular-nums"
+      className={className}
     >
       {Number(value).toLocaleString("en-IN")}
     </motion.span>

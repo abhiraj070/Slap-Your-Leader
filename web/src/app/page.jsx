@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useState } from "react";
-import { Search } from "lucide-react";
+import { Search, Trophy } from "lucide-react";
 
 import { InfoSheet } from "@/components/InfoSheet";
 import { Landing } from "@/components/Landing";
@@ -13,12 +13,18 @@ import { RepresentativeCard } from "@/components/RepresentativeCard";
 import { SearchSheet } from "@/components/SearchSheet";
 import { ErrorScreen, LocatingScreen } from "@/components/StatusScreens";
 import { useMinistries } from "@/hooks/useMinistries";
-import { fetchRepresentatives, toFriendlyError } from "@/lib/api";
+import {
+  fetchMinisterByName,
+  fetchMpByName,
+  fetchRepresentatives,
+  toFriendlyError,
+} from "@/lib/api";
 import {
   GEOLOCATION_COPY,
   GeolocationError,
   requestPosition,
 } from "@/lib/geolocation";
+import { rankOf } from "@/lib/ministries";
 
 const RANK_ORDER = {
   "Prime Minister": 0,
@@ -55,6 +61,10 @@ export default function Home() {
   const [isLocating, setIsLocating] = useState(false);
   const [openSheet, setOpenSheet] = useState(null); // "info" | "leaderboard" | "search" | null
   const [selectedMinistry, setSelectedMinistry] = useState(null);
+  // Set when a leaderboard row is tapped — a fully-fetched subject that
+  // overrides whatever else is on screen until the user backs out of it.
+  const [leaderboardSubject, setLeaderboardSubject] = useState(null);
+  const [pendingTopperKey, setPendingTopperKey] = useState(null);
   const [lastChoice, setLastChoice] = useState(null); // "slap" | "rose" | null — drives the share copy and CTA highlight
   const [toast, setToast] = useState(null);
   const [pendingMinisterName, setPendingMinisterName] = useState(
@@ -105,7 +115,8 @@ export default function Home() {
     }
   }, []);
 
-  const subject = buildSubject(selectedMinistry, data?.mp);
+  const subject =
+    leaderboardSubject ?? buildSubject(selectedMinistry, data?.mp, ministryEntries);
 
   const subjectKey = subject
     ? `${subject.tier}:${subject.tier === "minister" ? subject.ministry + "|" + subject.name : subject.constituency_key + "|" + subject.name}`
@@ -118,10 +129,78 @@ export default function Home() {
     setTimeout(() => setToast(null), 2200);
   }, []);
 
+  /**
+   * Opens a leaderboard row as a full profile, reusing the same
+   * `RepresentativeCard` the home MP/minister uses — no separate modal or
+   * simplified view. Only one lookup runs at a time; a second tap while one
+   * is in flight is a no-op rather than racing two fetches.
+   */
+  const handleSelectTopper = useCallback(
+    async (tier, topper) => {
+      if (pendingTopperKey) return;
+
+      const toppedName = tier === "minister" ? topper.minister_name : topper.name;
+      const key = `${tier}:${toppedName}`;
+      setPendingTopperKey(key);
+
+      try {
+        if (tier === "mp") {
+          const details = await fetchMpByName({
+            name: topper.name,
+            constituencyKey: topper.constituency_key,
+          });
+          if (!details) throw new Error("MP not found");
+          setLeaderboardSubject({
+            tier: "mp",
+            ...details,
+            designation: findMpDesignation(details.name, ministryEntries),
+          });
+        } else {
+          const details = await fetchMinisterByName({
+            name: topper.minister_name,
+            ministry: topper.ministry,
+          });
+          if (!details) throw new Error("Minister not found");
+          const firstFragment = String(details.ministry ?? "")
+            .split(";")[0]
+            .trim();
+          setLeaderboardSubject({
+            tier: "minister",
+            name: details.minister_name,
+            minister_name: details.minister_name,
+            party: details.party,
+            photo_url: details.photo_url,
+            slap_count: details.slap_count,
+            rose_count: details.rose_count,
+            points: details.manifesto_points,
+            manifesto_points: details.manifesto_points,
+            ministry: details.ministry,
+            portfolio: firstFragment,
+            rank_title: rankOf(firstFragment),
+            designation: firstFragment,
+          });
+        }
+        setOpenSheet(null);
+      } catch {
+        showToast("Couldn't load their profile. Try again?");
+      } finally {
+        setPendingTopperKey(null);
+      }
+    },
+    [pendingTopperKey, ministryEntries, showToast],
+  );
+
+  const handleBackFromLeaderboardProfile = useCallback(() => {
+    setLeaderboardSubject(null);
+  }, []);
+
   const handleShare = useCallback(
     async (currentChoice) => {
       if (!subject || typeof window === "undefined") return;
-      const url = buildShareUrl(subject, coords);
+      // A leaderboard-navigated MP isn't the one `coords` points at — sharing
+      // the home location here would silently send the recipient to the
+      // wrong person, so it's withheld rather than reused.
+      const url = buildShareUrl(subject, leaderboardSubject ? null : coords);
       const text = buildShareMessage(subject, currentChoice);
 
       try {
@@ -217,11 +296,16 @@ export default function Home() {
           <ResultsHeader
             subject={subject}
             isMinister={subject.tier === "minister"}
+            isViewingOther={Boolean(leaderboardSubject)}
             onResetToMp={
-              subject.tier === "minister"
-                ? () => setSelectedMinistry(null)
-                : null
+              leaderboardSubject
+                ? handleBackFromLeaderboardProfile
+                : subject.tier === "minister"
+                  ? () => setSelectedMinistry(null)
+                  : null
             }
+            backLabel={leaderboardSubject ? "← Back" : "← Back to your MP"}
+            onOpenLeaderboard={() => setOpenSheet("leaderboard")}
           />
 
           <RepresentativeCard
@@ -229,7 +313,6 @@ export default function Home() {
             subject={subject}
             keySeed={subjectKey}
             onOpenInfo={() => setOpenSheet("info")}
-            onOpenLeaderboard={() => setOpenSheet("leaderboard")}
             onShare={() => handleShare(lastChoice)}
             onFirstVote={handleVoteCast}
           />
@@ -244,12 +327,17 @@ export default function Home() {
             onClose={closeSheet}
             tier={subject.tier}
             currentIdentity={subject.name}
+            onSelectTopper={handleSelectTopper}
+            pendingKey={pendingTopperKey}
           />
           <SearchSheet
             open={openSheet === "search"}
             onClose={closeSheet}
             selected={selectedMinistry}
-            onSelect={(entry) => setSelectedMinistry(entry)}
+            onSelect={(entry) => {
+              setLeaderboardSubject(null);
+              setSelectedMinistry(entry);
+            }}
           />
 
           <Toast message={toast} />
@@ -261,45 +349,103 @@ export default function Home() {
   );
 }
 
-function ResultsHeader({ subject, isMinister, onResetToMp }) {
-  const location = isMinister
-    ? null
-    : titleCase(subject.constituency ?? "");
+/**
+ * The nameplate look: rectangular rather than a full pill, a muted brass
+ * hairline border with a second inset line just inside it (the classic
+ * engraved-plaque double rule), and a faint top-to-bottom gradient for a
+ * touch of dimension. Deliberately no extra glyphs or corner flourishes —
+ * the double border already reads as "plaque" without adding clutter.
+ */
+const NAMEPLATE_CLASS =
+  "relative inline-flex items-center gap-1.5 rounded-[10px] border border-[#c9a869]/50 bg-gradient-to-b from-white to-[#faf3e6] px-4 py-2 text-[11px] leading-none font-medium tracking-[0.14em] text-ink uppercase shadow-card";
+
+function NameplateBorder() {
+  return (
+    <span
+      aria-hidden
+      className="pointer-events-none absolute inset-[3px] rounded-[7px] border border-[#c9a869]/25"
+    />
+  );
+}
+
+function ResultsHeader({
+  subject,
+  isMinister,
+  isViewingOther = false,
+  onResetToMp,
+  backLabel = "← Back to your MP",
+  onOpenLeaderboard,
+}) {
+  // Viewing someone else via the leaderboard always shows the back button in
+  // this slot instead — the constituency badge would otherwise displace it
+  // whenever the tapped row happens to be another MP.
+  const location =
+    isMinister || isViewingOther ? null : titleCase(subject.constituency ?? "");
 
   return (
     <motion.header
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: [0.2, 0, 0, 1] }}
-      className="mb-6 text-center sm:mb-8"
+      className="mb-6 sm:mb-8"
     >
-      {location ? (
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-rule bg-surface px-3 py-1 text-[11px] leading-none font-medium tracking-[0.09em] text-ink uppercase shadow-card">
-          {location}
-        </span>
-      ) : onResetToMp ? (
-        <button
+      {/* Global top bar: location on the left, Leaderboard as a screen-level
+          action on the right — not tucked inside the card below. */}
+      <div className="flex items-center justify-between gap-3">
+        {location ? (
+          <span className={NAMEPLATE_CLASS}>
+            <NameplateBorder />
+            <span className="relative">{location}</span>
+          </span>
+        ) : onResetToMp ? (
+          <button
+            type="button"
+            onClick={onResetToMp}
+            className={`${NAMEPLATE_CLASS} text-muted transition-colors hover:text-ink`}
+          >
+            <NameplateBorder />
+            <span className="relative">{backLabel}</span>
+          </button>
+        ) : (
+          <span aria-hidden />
+        )}
+
+        <motion.button
           type="button"
-          onClick={onResetToMp}
-          className="inline-flex items-center gap-1.5 rounded-full border border-rule bg-surface px-3 py-1 text-[11px] leading-none font-medium tracking-[0.09em] text-muted uppercase shadow-card transition-colors hover:text-ink"
+          onClick={onOpenLeaderboard}
+          whileHover={{ y: -1 }}
+          whileTap={{ y: 1, scale: 0.96 }}
+          transition={{ duration: 0.15, ease: [0.2, 0, 0, 1] }}
+          className="inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-2 text-xs font-semibold tracking-[0.05em] text-paper uppercase shadow-card transition-colors hover:bg-slap"
         >
-          ← Back to your MP
-        </button>
-      ) : null}
-
-      <h1 className="mt-4 font-serif text-3xl leading-[1.05] text-balance sm:text-4xl">
-        {isMinister
-          ? "They serve the country. Judge the service."
-          : "They work for you. Judge the work."}
-      </h1>
-
-      <div className="mt-4">
-        <Ornament />
+          <Trophy className="size-3.5" strokeWidth={2} />
+          Leaderboard
+        </motion.button>
       </div>
 
-      <p className="mx-auto mt-4 max-w-lg text-sm leading-relaxed text-muted text-pretty">
-        Read their record. Then slap or rose them.
-      </p>
+      <div className="text-center">
+        <h1 className="mt-6 font-serif text-3xl leading-[1.05] text-balance sm:text-4xl">
+          {isMinister ? (
+            <>
+              They serve <span className="text-laurel">the country</span>.{" "}
+              <span className="text-slap">Judge</span> the service.
+            </>
+          ) : (
+            <>
+              They work for <span className="text-laurel">you</span>.{" "}
+              <span className="text-slap">Judge</span> the work.
+            </>
+          )}
+        </h1>
+
+        <div className="mt-4">
+          <Ornament />
+        </div>
+
+        <p className="mx-auto mt-4 max-w-lg text-sm leading-relaxed text-muted text-pretty">
+          Read their record. Then slap or rose them.
+        </p>
+      </div>
     </motion.header>
   );
 }
@@ -317,7 +463,7 @@ function FloatingSearchButton({ onClick }) {
   const [showHint, setShowHint] = useState(true);
 
   useEffect(() => {
-    const timer = setTimeout(() => setShowHint(false), 4500);
+    const timer = setTimeout(() => setShowHint(false), 9000);
     return () => clearTimeout(timer);
   }, []);
 
@@ -332,7 +478,7 @@ function FloatingSearchButton({ onClick }) {
             transition={{ duration: 0.25, ease: [0.2, 0, 0, 1] }}
             className="hidden rounded-full border border-rule bg-surface px-3.5 py-2 text-xs font-medium text-ink shadow-card sm:inline-block"
           >
-            Search any politician
+            Search any minister
           </motion.span>
         )}
       </AnimatePresence>
@@ -348,9 +494,9 @@ function FloatingSearchButton({ onClick }) {
           opacity: 1,
           scale: [1, 1.05, 1],
           boxShadow: [
-            "0 0 0 0 rgb(140 47 42 / 0)",
-            "0 0 0 10px rgb(140 47 42 / 0.10)",
-            "0 0 0 0 rgb(140 47 42 / 0)",
+            "0 0 0 0 rgb(47 107 74 / 0)",
+            "0 0 0 10px rgb(47 107 74 / 0.14)",
+            "0 0 0 0 rgb(47 107 74 / 0)",
           ],
         }}
         transition={{
@@ -361,7 +507,7 @@ function FloatingSearchButton({ onClick }) {
         whileHover={{ scale: 1.08, y: -2 }}
         whileTap={{ scale: 0.95 }}
         aria-label="Search another MP or Minister"
-        className="flex size-16 items-center justify-center rounded-full border border-ink bg-ink text-paper shadow-lift transition-colors hover:border-slap hover:bg-slap focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+        className="flex size-16 items-center justify-center rounded-full bg-ink text-paper shadow-lift transition-colors hover:bg-laurel focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
       >
         <Search className="size-6" strokeWidth={2.25} />
       </motion.button>
@@ -416,7 +562,29 @@ function buildShareUrl(subject, coords) {
   return `${origin}/?${params.toString()}`;
 }
 
-function buildSubject(selectedMinistry, mp) {
+/**
+ * An MP's own record has no ministry field — most aren't in the union
+ * council at all. Cross-referencing the already-fetched ministries list by
+ * name (client-side, no backend change) tells us the ones who are, using
+ * each fragment's raw portfolio text ("Minister of Housing and Urban
+ * Affairs") rather than the cleaned search label. The PM's row carries many
+ * fragments from a long prose blob, so that case just says "Prime Minister"
+ * instead of joining all of them into a wall of text.
+ */
+function findMpDesignation(mpName, ministryEntries) {
+  const fallback = "Member of Parliament";
+  if (!mpName || !ministryEntries?.length) return fallback;
+
+  const target = mpName.toLowerCase();
+  const matches = ministryEntries.filter(
+    (entry) => entry.minister.minister_name?.toLowerCase() === target,
+  );
+  if (matches.length === 0) return fallback;
+  if (matches[0].rank === "Prime Minister") return "Prime Minister";
+  return matches.map((entry) => entry.portfolio).join(" & ");
+}
+
+function buildSubject(selectedMinistry, mp, ministryEntries) {
   if (selectedMinistry) {
     const entry = selectedMinistry;
     const m = entry.minister;
@@ -433,9 +601,17 @@ function buildSubject(selectedMinistry, mp) {
       ministry: entry.ministry,
       portfolio: entry.portfolio || entry.label,
       rank_title: entry.rank,
+      designation: entry.portfolio || entry.label,
     };
   }
-  if (mp) return { tier: "mp", ...mp };
+  if (mp) {
+    return {
+      tier: "mp",
+      ...mp,
+      isHome: true,
+      designation: findMpDesignation(mp.name, ministryEntries),
+    };
+  }
   return null;
 }
 

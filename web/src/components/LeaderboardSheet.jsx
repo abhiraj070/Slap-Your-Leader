@@ -3,28 +3,26 @@
 import { BottomSheet } from "./BottomSheet";
 import { Leaderboard } from "./Leaderboard";
 
-const TITLES = {
-  mp: { title: "Leaderboard", subtitle: "How MPs stack up nationally" },
-  minister: {
-    title: "Leaderboard",
-    subtitle: "How ministers stack up nationally",
-  },
-};
-
-export function LeaderboardSheet({ open, onClose, tier, currentIdentity }) {
-  const copy = TITLES[tier] ?? TITLES.mp;
+export function LeaderboardSheet({
+  open,
+  onClose,
+  tier,
+  currentIdentity,
+  onSelectTopper,
+  pendingKey,
+}) {
   return (
     <BottomSheet
       open={open}
       onClose={onClose}
-      title={copy.title}
-      subtitle={copy.subtitle}
+      title="Leaderboard"
+      subtitle="How they stack up nationally"
     >
       <Leaderboard
-        tier={tier}
-        forceEnabled
+        defaultTier={tier}
         highlightName={currentIdentity}
-        chromeless
+        onSelectTopper={onSelectTopper}
+        pendingKey={pendingKey}
       />
     </BottomSheet>
   );

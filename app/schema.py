@@ -23,3 +23,11 @@ class UpdateMinistryRequest(BaseModel):
     name_field_to_update: str
     ministry_name: str
     field_to_update: str
+
+class GetMinisterRequest(BaseModel):
+    name: str
+    ministry: str
+
+class GetMpRequest(BaseModel):
+    name: str
+    constituency_key: str

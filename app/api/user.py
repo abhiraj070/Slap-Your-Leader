@@ -1,8 +1,8 @@
 from app.main import app
-from app.schema import LocationRequest, MinistrySearchRequest, UpdateMinistryRequest, UpdateMemberRequest
+from app.schema import LocationRequest, MinistrySearchRequest, UpdateMinistryRequest, UpdateMemberRequest, GetMinisterRequest, GetMpRequest
 from app.db.connect import get_db, engine
 from sqlalchemy.orm import Session
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Query
 from sqlalchemy import MetaData, Table, select, func, update
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -59,21 +59,23 @@ def get_minister(request: MinistrySearchRequest, db: Session= Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
 
-@app.post("/get-leaderboard-mp")
-def get_leaderboard_mp(db: Session= Depends(get_db)):
+@app.get("/get-leaderboard-mp")
+def get_leaderboard_mp(offset:int= Query(0,ge=0,le=100), limit: int= Query(10,ge=1,le=100), db: Session= Depends(get_db)):
     try:
         cols= (mp.c.name, mp.c.party, mp.c.constituency, mp.c.constituency_key,
                mp.c.photo_url, mp.c.slap_count, mp.c.rose_count)
         slap_toppers= db.execute(
-            select(*cols).where(mp.c.slap_count > 0)
-                         .order_by(mp.c.slap_count.desc())
-                         .limit(10)
+            select(*cols).order_by(mp.c.slap_count.desc(), mp.c.id.asc())
+                         .limit(limit)
+                         .offset(offset)
         ).mappings().all()
         rose_toppers= db.execute(
-            select(*cols).where(mp.c.rose_count > 0)
-                         .order_by(mp.c.rose_count.desc())
-                         .limit(10)
+            select(*cols).order_by(mp.c.rose_count.desc(), mp.c.id.asc())
+                         .limit(limit)
+                         .offset(offset)
+
         ).mappings().all()
+        print("res:",slap_toppers)
         return {"slap_toppers": slap_toppers, "rose_toppers": rose_toppers}
     except SQLAlchemyError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
@@ -81,20 +83,20 @@ def get_leaderboard_mp(db: Session= Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
 
-@app.post("/get-leaderboard-minister")
-def get_leaderboard_minister(db: Session= Depends(get_db)):
+@app.get("/get-leaderboard-minister")
+def get_leaderboard_minister(limit:int= Query(10,ge=1,le=100), offset: int= Query(0,ge=0,le=100),db: Session= Depends(get_db)):
     try:
         cols= (minister.c.minister_name, minister.c.party, minister.c.ministry,
                minister.c.photo_url, minister.c.slap_count, minister.c.rose_count)
         slap_toppers= db.execute(
-            select(*cols).where(minister.c.slap_count > 0)
-                         .order_by(minister.c.slap_count.desc())
-                         .limit(10)
+            select(*cols).order_by(minister.c.slap_count.desc(), minister.c.id.asc())
+                         .limit(limit)
+                         .offset(offset)
         ).mappings().all()
         rose_toppers= db.execute(
-            select(*cols).where(minister.c.rose_count > 0)
-                         .order_by(minister.c.rose_count.desc())
-                         .limit(10)
+            select(*cols).order_by(minister.c.rose_count.desc(), minister.c.id.asc())
+                         .limit(limit)
+                         .offset(offset)
         ).mappings().all()
         return {"slap_toppers": slap_toppers, "rose_toppers": rose_toppers}
     except SQLAlchemyError as e:
@@ -156,6 +158,45 @@ def update_ministry_count(request: UpdateMinistryRequest, db: Session= Depends(g
         return {"rows_updated": result.rowcount}
     except HTTPException:
         raise
+    except SQLAlchemyError as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+
+
+@app.post("/get-ministers-by-name")
+def get_minister_by_name(request: GetMinisterRequest, db: Session= Depends(get_db)):
+    try:
+        name= request.name
+        ministry= request.ministry
+        stmt= (
+            select(minister.c.ministry, minister.c.minister_name, minister.c.party,
+                   minister.c.photo_url, minister.c.slap_count, minister.c.rose_count,
+                   minister.c.manifesto_points)
+            .where((minister.c.minister_name==name) & (minister.c.ministry==ministry))
+        )
+        minister_details= db.execute(stmt).mappings().first()
+        return {"minister_details": minister_details}
+    except SQLAlchemyError as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+
+
+@app.post("/get-mps-by-name")
+def get_mp_by_name(request: GetMpRequest, db: Session= Depends(get_db)):
+    try:
+        name= request.name
+        constituency_key= request.constituency_key
+        stmt= (
+            select(mp.c.name, mp.c.party, mp.c.criminal_cases, mp.c.education,
+                   mp.c.photo_url, mp.c.slap_count, mp.c.rose_count,
+                   mp.c.constituency, mp.c.constituency_key, manifesto.c.points)
+            .join(manifesto, mp.c.party==manifesto.c.party)
+            .where((mp.c.name==name) & (mp.c.constituency_key==constituency_key))
+        )
+        mp_details= db.execute(stmt).mappings().first()
+        return {"mp_details": mp_details}
     except SQLAlchemyError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
     except Exception as e:

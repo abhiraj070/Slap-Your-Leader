@@ -74,7 +74,7 @@ export function BottomSheet({
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
             transition={{ type: "spring", stiffness: 340, damping: 34 }}
-            className={`absolute inset-x-0 bottom-0 flex ${sheetHeight} flex-col rounded-t-[28px] border-t border-rule bg-surface shadow-lift sm:mx-auto sm:max-w-2xl sm:rounded-t-[32px] lg:max-w-3xl`}
+            className={`absolute inset-x-0 bottom-0 flex ${sheetHeight} flex-col rounded-t-[32px] bg-surface shadow-lift sm:mx-auto sm:max-w-2xl sm:rounded-t-[36px] lg:max-w-3xl`}
           >
             <div
               aria-hidden
@@ -89,14 +89,17 @@ export function BottomSheet({
                   <p className="mt-1 text-sm text-muted">{subtitle}</p>
                 )}
               </div>
-              <button
+              <motion.button
                 type="button"
                 onClick={onClose}
                 aria-label="Close"
-                className="shrink-0 rounded-full border border-rule bg-surface p-2 text-muted transition-colors hover:border-ink hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                whileHover={{ scale: 1.08 }}
+                whileTap={{ scale: 0.94 }}
+                transition={{ type: "spring", stiffness: 420, damping: 22 }}
+                className="shrink-0 rounded-full bg-paper p-2 text-muted shadow-card transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
               >
                 <X className="size-4" strokeWidth={2} />
-              </button>
+              </motion.button>
             </header>
             <div
               ref={contentRef}

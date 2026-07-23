@@ -43,15 +43,18 @@ const LEADERBOARD_PATH = {
 };
 
 /**
- * `POST /get-leaderboard-{tier}` — top 10 rows by slap count and by rose count.
+ * `GET /get-leaderboard-{tier}?limit=&offset=` — rows by slap count and by
+ * rose count, one page at a time.
  *
  * The backend filters counts > 0, so an empty response is a genuine "nobody's
- * been voted on yet" signal rather than sparse data.
+ * been voted on yet" signal rather than sparse data. Note `offset` is
+ * 1-indexed on this API — `offset=0` is rejected (422) — so the first page
+ * must be requested with `offset: 1`, not 0.
  */
-export async function fetchLeaderboard(tier) {
+export async function fetchLeaderboard(tier, { limit = 10, offset = 1 } = {}) {
   const path = LEADERBOARD_PATH[tier];
   if (!path) throw new Error(`Unknown leaderboard tier: ${tier}`);
-  const { data } = await api.post(path, {});
+  const { data } = await api.get(path, { params: { limit, offset } });
   return {
     slapToppers: Array.isArray(data?.slap_toppers) ? data.slap_toppers : [],
     roseToppers: Array.isArray(data?.rose_toppers) ? data.rose_toppers : [],
@@ -87,6 +90,31 @@ export async function castVote({ tier, name, constituencyKey, choice }) {
     field_to_update: COLUMN_FOR_CHOICE[choice],
   });
   return data;
+}
+
+/**
+ * `POST /get-mps-by-name` — the full record for one MP, identified by
+ * (name, constituency_key) the same way `castVote` identifies them. Used to
+ * open a leaderboard row as a full profile. Returns `{ mp_details }`, `null`
+ * when nothing matches.
+ */
+export async function fetchMpByName({ name, constituencyKey }) {
+  const { data } = await api.post("/get-mps-by-name", {
+    name,
+    constituency_key: constituencyKey,
+  });
+  return data?.mp_details ?? null;
+}
+
+/**
+ * `POST /get-ministers-by-name` — the full record for one minister, identified
+ * by (name, ministry) — `ministry` must be the row's full original portfolio
+ * string, same convention as `castMinistryVote`. Returns `{ minister_details }`,
+ * `null` when nothing matches.
+ */
+export async function fetchMinisterByName({ name, ministry }) {
+  const { data } = await api.post("/get-ministers-by-name", { name, ministry });
+  return data?.minister_details ?? null;
 }
 
 /**

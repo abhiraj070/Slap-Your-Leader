@@ -26,7 +26,7 @@ function isNoise(fragment) {
  * portfolio on a row belongs to the same appointment, so "Department of Space"
  * on the PM's row is the Prime Minister's, not a cabinet post of its own.
  */
-function rankOf(portfolio) {
+export function rankOf(portfolio) {
   if (/^Prime Minister\b/i.test(portfolio)) return "Prime Minister";
   if (/^Minister of State \(Independent Charge\)/i.test(portfolio)) {
     return "MoS (Independent Charge)";

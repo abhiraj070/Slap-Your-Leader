@@ -20,6 +20,22 @@ export const FLIGHT_MS = 900;
 export const IMPACT_MS = 700;
 export const SETTLE_MS = 450;
 
+/**
+ * Where the strike actually lands, as a fraction of the portrait's own
+ * width/height — shared with `SlapImpact` in `VotePortrait.jsx` so the thrown
+ * hand and the mark it leaves can never drift apart again. `IMPACT_X` is
+ * measured in from the struck edge (mirrored for the other side), not from
+ * the portrait's dead centre, since a slap lands on a cheek, not the nose.
+ * Percentages of the portrait's own box keep this correct at any image size
+ * or breakpoint. Calibrated against the actual portrait crop (a plain
+ * overlay dot at candidate values, checked against a percentage grid) rather
+ * than guessed — these photos are head-and-shoulders shots where the face
+ * sits lower and smaller in the frame than a tight face crop would suggest,
+ * so `IMPACT_Y` needed to land near the mouth/jaw line (~48%), not eye level.
+ */
+export const IMPACT_X = 0.3;
+export const IMPACT_Y = 0.48;
+
 const MESSAGES = {
   // Deliberately not "the man" — representatives are of any gender, and the
   // roster includes plenty of women.
@@ -66,7 +82,14 @@ export function useVoteChoreography({ stageRef, portraitRef, buttonsRef }) {
     };
   }, []);
 
-  /** Button centre → portrait's upper third, both relative to the card. */
+  /**
+   * Button centre → the point of impact on the portrait, both relative to
+   * the card. For a slap that's the struck cheek (`IMPACT_X`/`IMPACT_Y`,
+   * mirrored by which side the button sits on); for a rose it's the
+   * portrait's dead centre, matching `Bloom`'s centred bouquet. Sharing the
+   * same constants `SlapImpact` renders with is what keeps the hand landing
+   * exactly where its mark then appears, at any image size or breakpoint.
+   */
   const measure = useCallback(
     (choice) => {
       const stage = stageRef.current;
@@ -78,15 +101,29 @@ export function useVoteChoreography({ stageRef, portraitRef, buttonsRef }) {
       const b = button.getBoundingClientRect();
       const p = portrait.getBoundingClientRect();
 
+      // +1 when the button sits left of the portrait's centre: the hand
+      // travels left-to-right and lands on the near (left) cheek. Derived
+      // from button vs. portrait position — not from the flight target —
+      // so it's available before the target itself is computed.
+      const direction = b.left + b.width / 2 <= p.left + p.width / 2 ? 1 : -1;
+
+      const targetX =
+        choice === "slap"
+          ? p.left + p.width * (direction === 1 ? IMPACT_X : 1 - IMPACT_X)
+          : p.left + p.width / 2;
+      const targetY =
+        choice === "slap" ? p.top + p.height * IMPACT_Y : p.top + p.height / 2;
+
       return {
         from: {
           x: b.left + b.width / 2 - s.left,
           y: b.top + b.height / 2 - s.top,
         },
         to: {
-          x: p.left + p.width / 2 - s.left,
-          y: p.top + p.height * 0.4 - s.top,
+          x: targetX - s.left,
+          y: targetY - s.top,
         },
+        direction,
       };
     },
     [stageRef, portraitRef, buttonsRef],
@@ -119,9 +156,7 @@ export function useVoteChoreography({ stageRef, portraitRef, buttonsRef }) {
         return;
       }
 
-      // +1 when the hand travels left-to-right, so the head can recoil the way
-      // it was hit and the flush can land on the struck cheek.
-      const direction = path.to.x >= path.from.x ? 1 : -1;
+      const direction = path.direction;
       setImpactDirection(direction);
 
       setFlight({ choice, ...path });

@@ -1,35 +1,37 @@
 @import "tailwindcss";
 
 /*
- * Editorial dossier theme. Light-only by design: the paper ground is the
- * point, so we don't opt into `prefers-color-scheme: dark`.
+ * Warm editorial theme (2026-07-23 redesign). Light-only by design: the warm
+ * paper ground is the point, so we don't opt into `prefers-color-scheme: dark`.
  *
  * The two verdict accents are named `slap` and `laurel` rather than
  * slap/rose — Tailwind already ships a `rose-*` palette, and shadowing it
- * would make `bg-rose` ambiguous.
+ * would make `bg-rose` ambiguous. `slap` is now a warm coral-orange and
+ * `laurel` a brighter forest green — same roles as the old oxblood/sage,
+ * warmed up to match the new reference direction.
  */
 @theme {
-  --color-paper: #f7f5f1;
+  --color-paper: #faf6ee;
   --color-surface: #ffffff;
-  --color-ink: #17171a;
-  --color-muted: #6b6862;
-  --color-faint: #b3aea4;
-  --color-rule: #e2ded7;
+  --color-ink: #20241f;
+  --color-muted: #6e6a5f;
+  --color-faint: #b7ae9c;
+  --color-rule: #e7e0d1;
 
-  --color-slap: #8c2f2a;
-  --color-slap-wash: #f5eae8;
-  --color-laurel: #3f5f4a;
-  --color-laurel-wash: #eaefea;
+  --color-slap: #e2632e;
+  --color-slap-wash: #fceee5;
+  --color-laurel: #2f6b4a;
+  --color-laurel-wash: #e7f1e9;
 
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-serif: var(--font-source-serif), Georgia, "Times New Roman", serif;
 
-  --radius-card: 14px;
-  --radius-control: 10px;
-  --radius-photo: 8px;
+  --radius-card: 24px;
+  --radius-control: 16px;
+  --radius-photo: 20px;
 
-  --shadow-card: 0 1px 2px rgb(23 23 26 / 0.05), 0 4px 12px -6px rgb(23 23 26 / 0.08);
-  --shadow-lift: 0 2px 6px rgb(23 23 26 / 0.06), 0 20px 40px -16px rgb(23 23 26 / 0.16);
+  --shadow-card: 0 1px 2px rgb(64 44 20 / 0.05), 0 6px 16px -8px rgb(64 44 20 / 0.10);
+  --shadow-lift: 0 3px 8px rgb(64 44 20 / 0.07), 0 24px 44px -18px rgb(64 44 20 / 0.18);
 }
 
 html {
@@ -38,9 +40,9 @@ html {
 
 body {
   background:
-    radial-gradient(1200px 800px at 12% 0%, #fbf8f3 0%, transparent 55%),
-    radial-gradient(900px 700px at 100% 15%, #f4efe6 0%, transparent 60%),
-    radial-gradient(700px 700px at 50% 100%, #f2ede4 0%, transparent 65%),
+    radial-gradient(900px 620px at 6% -4%, rgb(47 107 74 / 0.14) 0%, transparent 60%),
+    radial-gradient(760px 620px at 104% 8%, rgb(226 99 46 / 0.16) 0%, transparent 62%),
+    radial-gradient(700px 700px at 50% 100%, #f3ecdd 0%, transparent 65%),
     var(--color-paper);
   background-attachment: fixed;
   color: var(--color-ink);
